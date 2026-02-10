@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YOLO Webcam Detection</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            padding: 30px;
+            max-width: 1200px;
+            width: 100%;
+        }
+
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 2.5em;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 1.1em;
+        }
+
+        .video-container {
+            position: relative;
+            width: 100%;
+            max-width: 800px;
+            margin: 0 auto 20px;
+            background: #000;
+            border-radius: 15px;
+            overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        }
+
+        #webcam {
+            width: 100%;
+            display: block;
+        }
+
+        #canvas {
+            display: none;
+        }
+
+        #processed-frame {
+            width: 100%;
+            display: block;
+            min-height: 400px;
+        }
+
+        .controls {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        button {
+            padding: 12px 30px;
+            font-size: 1.1em;
+            border: none;
+            border-radius: 25px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        #start-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        #start-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        #stop-btn {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+            display: none;
+        }
+
+        #stop-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(245, 87, 108, 0.4);
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none !important;
+        }
+
+        .status {
+            text-align: center;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            font-weight: bold;
+        }
+
+        .status.active {
+            background: linear-gradient(135deg, #84fab0 0%, #8fd3f4 100%);
+            color: #155724;
+        }
+
+        .status.inactive {
+            background: #f8f9fa;
+            color: #6c757d;
+        }
+
+        .detections {
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 20px;
+            margin-top: 20px;
+        }
+
+        .detections h3 {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 1.5em;
+        }
+
+        .detection-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 10px;
+        }
+
+        .detection-item {
+            background: white;
+            padding: 12px;
+            border-radius: 10px;
+            border-left: 4px solid #667eea;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+        }
+
+        .detection-item .class-name {
+            font-weight: bold;
+            color: #333;
+            font-size: 1.1em;
+        }
+
+        .detection-item .confidence {
+            color: #667eea;
+            font-size: 0.9em;
+            margin-top: 5px;
+        }
+
+        .fps-counter {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 8px 15px;
+            border-radius: 20px;
+            font-weight: bold;
+            z-index: 10;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #666;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎯 YOLO Webcam Detection</h1>
+        <p class="subtitle">Real-time object detection using YOLOv8</p>
+
+        <div class="status inactive" id="status">
+            Camera Stopped
+        </div>
+
+        <div class="controls">
+            <button id="start-btn">Start Detection</button>
+            <button id="stop-btn">Stop Detection</button>
+        </div>
+
+        <div class="video-container">
+            <div class="fps-counter" id="fps">0 FPS</div>
+            <video id="webcam" autoplay playsinline></video>
+            <canvas id="canvas"></canvas>
+            <img id="processed-frame" alt="Processed frame will appear here">
+        </div>
+
+        <div class="detections">
+            <h3>Detected Objects</h3>
+            <div class="detection-list" id="detection-list">
+                <div class="loading">Start the camera to begin detection</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const webcam = document.getElementById('webcam');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const processedFrame = document.getElementById('processed-frame');
+        const startBtn = document.getElementById('start-btn');
+        const stopBtn = document.getElementById('stop-btn');
+        const statusDiv = document.getElementById('status');
+        const detectionList = document.getElementById('detection-list');
+        const fpsCounter = document.getElementById('fps');
+
+        let stream = null;
+        let isProcessing = false;
+        let frameCount = 0;
+        let lastTime = Date.now();
+        let animationId = null;
+        let processingQueue = 0;
+
+        startBtn.addEventListener('click', startCamera);
+        stopBtn.addEventListener('click', stopCamera);
+
+        async function startCamera() {
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { 
+                        width: { ideal: 640 },  // Lower resolution for speed
+                        height: { ideal: 480 },
+                        frameRate: { ideal: 30 }
+                    } 
+                });
+                
+                webcam.srcObject = stream;
+                webcam.style.display = 'block';
+                processedFrame.style.display = 'none';
+                
+                startBtn.style.display = 'none';
+                stopBtn.style.display = 'inline-block';
+                statusDiv.textContent = 'Camera Active - Processing...';
+                statusDiv.className = 'status active';
+                
+                // Wait for video to be ready
+                webcam.onloadedmetadata = () => {
+                    canvas.width = webcam.videoWidth;
+                    canvas.height = webcam.videoHeight;
+                    processFrame();
+                };
+                
+            } catch (err) {
+                console.error('Error accessing webcam:', err);
+                alert('Error accessing webcam. Please ensure you have granted camera permissions.');
+            }
+        }
+
+        function stopCamera() {
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+                stream = null;
+            }
+            
+            if (animationId) {
+                cancelAnimationFrame(animationId);
+            }
+            
+            webcam.style.display = 'none';
+            startBtn.style.display = 'inline-block';
+            stopBtn.style.display = 'none';
+            statusDiv.textContent = 'Camera Stopped';
+            statusDiv.className = 'status inactive';
+            detectionList.innerHTML = '<div class="loading">Start the camera to begin detection</div>';
+            fpsCounter.textContent = '0 FPS';
+        }
+
+        async function processFrame() {
+            if (!stream) return;
+            
+            // Allow max 2 concurrent requests for smoother performance
+            if (processingQueue < 2) {
+                processingQueue++;
+                
+                // Draw current frame to canvas
+                ctx.drawImage(webcam, 0, 0, canvas.width, canvas.height);
+                
+                // Convert canvas to blob with lower quality for speed
+                canvas.toBlob(async (blob) => {
+                    if (!blob || !stream) {
+                        processingQueue--;
+                        return;
+                    }
+                    
+                    const formData = new FormData();
+                    formData.append('frame', blob, 'frame.jpg');
+                    
+                    try {
+                        const response = await fetch('/process_frame', {
+                            method: 'POST',
+                            body: formData
+                        });
+                        
+                        const data = await response.json();
+                        
+                        if (data.success) {
+                            // Update processed frame
+                            processedFrame.src = 'data:image/jpeg;base64,' + data.frame;
+                            processedFrame.style.display = 'block';
+                            webcam.style.display = 'none';
+                            
+                            // Update detections
+                            updateDetections(data.detections);
+                            
+                            // Update FPS
+                            frameCount++;
+                            const currentTime = Date.now();
+                            if (currentTime - lastTime >= 1000) {
+                                fpsCounter.textContent = frameCount + ' FPS';
+                                frameCount = 0;
+                                lastTime = currentTime;
+                            }
+                        }
+                    } catch (err) {
+                        console.error('Error processing frame:', err);
+                    }
+                    
+                    processingQueue--;
+                }, 'image/jpeg', 0.7);  // Lower quality for faster upload
+            }
+            
+            // Request next frame immediately for smoother video
+            animationId = requestAnimationFrame(processFrame);
+        }
+
+        function updateDetections(detections) {
+            if (detections.length === 0) {
+                detectionList.innerHTML = '<div class="loading">No objects detected</div>';
+                return;
+            }
+            
+            // Group detections by class
+            const grouped = {};
+            detections.forEach(d => {
+                if (!grouped[d.class]) {
+                    grouped[d.class] = [];
+                }
+                grouped[d.class].push(d.confidence);
+            });
+            
+            detectionList.innerHTML = '';
+            Object.keys(grouped).forEach(className => {
+                const count = grouped[className].length;
+                const avgConf = (grouped[className].reduce((a, b) => a + b, 0) / count).toFixed(1);
+                
+                const item = document.createElement('div');
+                item.className = 'detection-item';
+                item.innerHTML = `
+                    <div class="class-name">${className} ${count > 1 ? '(×' + count + ')' : ''}</div>
+                    <div class="confidence">${avgConf}% confidence</div>
+                `;
+                detectionList.appendChild(item);
+            });
+        }
+    </script>
+</body>
+</html>
