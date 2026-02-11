@@ -72,6 +72,7 @@ Responsible for:
 - YOLO (You Only Look Once)
 - OpenCV
 - Python
+-https://teachablemachine.withgoogle.com/
 
 ### Cloud & Infrastructure
 - AWS Cloud Services
