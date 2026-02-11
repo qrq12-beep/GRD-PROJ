@@ -494,39 +494,6 @@ body {
     -webkit-text-fill-color: transparent;
     background-clip: text;
 }
-    font-size: 0.95rem;
-    color: var(--text-secondary);
-    margin: 0;
-    font-weight: 500;
-}
-
-.stat-card.danger {
-    border: 1.5px solid var(--danger-light);
-    background: rgba(15, 23, 42, 0.5);
-}
-
-.stat-card.danger:hover {
-    background: var(--danger-light);
-    border-color: var(--danger);
-}
-
-.stat-card.danger h3 {
-    background: linear-gradient(135deg, var(--danger), #dc2626);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-}
-
-/* CAMERA */
-.camera-card {
-    background: var(--bg-card);
-    border-radius: 20px;
-    padding: 1.5rem;
-    border: 1px solid var(--border-color);
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
-    backdrop-filter: blur(20px);
-    margin-bottom: 2rem;
-}
 
 .camera-header {
     display: flex;
