@@ -1,177 +1,246 @@
-from flask import Flask, render_template, jsonify, request
+"""
+Violence Detection using modelnew.h5
+-------------------------------------
+Supports: video file or webcam
+Usage:
+    python app.py                          # webcam
+    python app.py --source video.mp4       # video file
+    python app.py --source 0               # webcam (explicit)
+"""
+
 import cv2
 import numpy as np
+import argparse
 import time
-import base64
+import os
 from collections import deque
+from datetime import datetime
 
-app = Flask(__name__)
+import tensorflow as tf
+tf.get_logger().setLevel("ERROR")
 
-class SmartFightDetector:
-    """Ultra-fast 60 FPS fight detection using multi-feature analysis"""
-    
-    def __init__(self):
-        self.prev_frame = None
-        self.motion_history = deque(maxlen=15)
-        self.fight_confidence = 0
-        self.frame_count = 0
-        
-        # Background subtractor
-        self.bg_subtractor = cv2.createBackgroundSubtractorKNN(detectShadows=False)
-        
-    def detect_fight(self, frame):
-        """Multi-feature fight detection"""
-        self.frame_count += 1
-        h, w = frame.shape[:2]
-        
-        # Feature 1: Frame differencing (fastest)
-        if self.prev_frame is None:
-            self.prev_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-            return False, 0, self.fight_confidence
-        
-        curr_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        frame_diff = cv2.absdiff(self.prev_frame, curr_gray)
-        
-        # Threshold and count changed pixels
-        _, thresh = cv2.threshold(frame_diff, 30, 255, cv2.THRESH_BINARY)
-        changed_pixels = np.count_nonzero(thresh)
-        frame_diff_score = min(100, (changed_pixels / (h * w)) * 200)
-        
-        # Feature 2: Foreground detection
-        fg_mask = self.bg_subtractor.apply(frame)
-        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
-        fg_mask = cv2.morphologyEx(fg_mask, cv2.MORPH_CLOSE, kernel)
-        
-        fg_pixels = np.count_nonzero(fg_mask)
-        fg_score = min(100, (fg_pixels / (h * w)) * 300)
-        
-        # Feature 3: Contour activity
-        contours, _ = cv2.findContours(fg_mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-        contour_count = len([c for c in contours if cv2.contourArea(c) > 50])
-        contour_score = min(100, contour_count * 15)
-        
-        # Weighted combination
-        combined_score = (
-            frame_diff_score * 0.45 +
-            fg_score * 0.35 +
-            contour_score * 0.20
+# ─────────────────────────────────────────────────────────────────────────────
+# CONFIGURATION
+# ─────────────────────────────────────────────────────────────────────────────
+MODEL_PATH      = "modelnew.h5"
+IMG_SIZE        = (128, 128)      # must match model input
+SEQUENCE_LEN    = 1               # single-frame model
+VIOLENCE_CLASS  = 1
+THRESHOLD       = 0.60
+SAVE_VIDEO      = True
+LOG_FILE        = "detections.log"
+INFER_EVERY_N   = 2               # run inference every N frames (1=every frame, 2=every other, etc.)
+                                  # lower = smoother but slower; raise if laggy
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def load_violence_model(path: str):
+    if not os.path.exists(path):
+        raise FileNotFoundError(
+            f"Model file not found: '{path}'\n"
+            "Make sure modelnew.h5 is in the same folder as this script."
         )
-        
-        # Update history and confidence
-        self.motion_history.append(combined_score)
-        avg_motion = np.mean(self.motion_history)
-        
-        # Smart hysteresis for fight detection
-        if avg_motion > 50:
-            self.fight_confidence = min(100, self.fight_confidence + 6)
+    print(f"[INFO] Loading model from: {path}")
+
+    from tensorflow.keras.utils import custom_object_scope
+
+    # Fix for older models saved with 'groups' in DepthwiseConv2D
+    class FixedDepthwiseConv2D(tf.keras.layers.DepthwiseConv2D):
+        def __init__(self, *args, **kwargs):
+            kwargs.pop('groups', None)
+            super().__init__(*args, **kwargs)
+
+    with custom_object_scope({'DepthwiseConv2D': FixedDepthwiseConv2D}):
+        model = tf.keras.models.load_model(path)
+
+    print(f"[INFO] Model input shape : {model.input_shape}")
+    print(f"[INFO] Model output shape: {model.output_shape}")
+    return model
+
+
+def preprocess_frame(frame: np.ndarray) -> np.ndarray:
+    """Resize & normalise a single BGR frame → float32 (does NOT alter display frame)."""
+    rgb     = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    resized = cv2.resize(rgb, IMG_SIZE)
+    return resized.astype(np.float32) / 255.0
+
+
+def predict(model, frame_buffer: deque):
+    frames = np.array(list(frame_buffer))
+    rank   = len(model.input_shape)
+
+    if rank == 4:
+        inp = frames[-1][np.newaxis]           # (1, H, W, C)
+    elif rank == 5:
+        seq = frames
+        if len(seq) < SEQUENCE_LEN:
+            pad = np.zeros((SEQUENCE_LEN - len(seq), *seq.shape[1:]), dtype=np.float32)
+            seq = np.concatenate([pad, seq], axis=0)
         else:
-            self.fight_confidence = max(0, self.fight_confidence - 4)
-        
-        fight_detected = self.fight_confidence > 55
-        
-        self.prev_frame = curr_gray
-        return fight_detected, int(avg_motion), int(self.fight_confidence)
+            seq = seq[-SEQUENCE_LEN:]
+        inp = seq[np.newaxis]                  # (1, T, H, W, C)
+    else:
+        raise ValueError(f"Unexpected model input rank: {rank}")
+
+    preds = model.predict(inp, verbose=0)[0]
+
+    if preds.shape[0] == 1:
+        conf       = float(preds[0])
+        is_violent = conf >= THRESHOLD
+    else:
+        conf       = float(preds[VIOLENCE_CLASS])
+        is_violent = conf >= THRESHOLD
+
+    return is_violent, conf
 
 
-class VideoCamera:
-    def __init__(self):
-        self.last_process_time = 0
-        self.process_interval = 1.0 / 60.0  # 60 FPS
-        self.fight_detector = SmartFightDetector()
-        self.fps_counter = 0
-        self.fps_time = time.time()
-        self.current_fps = 0
-        
-    def get_frame(self, frame_data):
-        try:
-            current_time = time.time()
-            
-            # Throttle to 60 FPS
-            if current_time - self.last_process_time < self.process_interval:
-                return None, [], False
-            
-            self.last_process_time = current_time
-            
-            # Decode
-            nparr = np.frombuffer(frame_data, np.uint8)
-            frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-            
-            if frame is None:
-                return None, [], False
-            
-            # Resize for speed
-            frame = cv2.resize(frame, (640, 480))
-            
-            # Detect
-            fight_detected, motion_score, confidence = self.fight_detector.detect_fight(frame)
-            
-            # FPS calc
-            self.fps_counter += 1
-            if current_time - self.fps_time >= 1.0:
-                self.current_fps = self.fps_counter
-                self.fps_counter = 0
-                self.fps_time = current_time
-            
-            # Annotate
-            annotated = frame.copy()
-            cv2.rectangle(annotated, (5, 5), (400, 120), (20, 20, 20), -1)
-            
-            # FPS
-            cv2.putText(annotated, f'FPS: {self.current_fps}', (15, 30),
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
-            
-            # Motion bar
-            bar_w = int((motion_score / 100) * 150)
-            cv2.rectangle(annotated, (15, 45), (165, 65), (100, 100, 100), 2)
-            if bar_w > 0:
-                col = (0, 0, 255) if fight_detected else (0, 255, 0)
-                cv2.rectangle(annotated, (15, 45), (15 + bar_w, 65), col, -1)
-            cv2.putText(annotated, f'Motion: {motion_score}%', (180, 60),
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
-            
-            # Confidence
-            conf_col = (0, 255, 0) if confidence < 50 else (0, 165, 255) if confidence < 70 else (0, 0, 255)
-            cv2.putText(annotated, f'Alert: {confidence}%', (15, 100),
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, conf_col, 2)
-            
-            # Alert
-            if fight_detected:
-                cv2.rectangle(annotated, (2, 2), (638, 478), (0, 0, 255), 4)
-                cv2.rectangle(annotated, (80, 200), (560, 280), (0, 0, 0), -1)
-                cv2.putText(annotated, 'FIGHT DETECTED!', (120, 245),
-                           cv2.FONT_HERSHEY_SIMPLEX, 1.5, (0, 0, 255), 4)
-                cv2.rectangle(annotated, (80, 200), (560, 280), (0, 0, 255), 3)
-            
-            # Encode
-            _, buf = cv2.imencode('.jpg', annotated, [int(cv2.IMWRITE_JPEG_QUALITY), 85])
-            
-            return buf.tobytes(), [{'class': 'smart_detection', 'confidence': motion_score}], fight_detected
-        
-        except Exception as e:
-            print(f"Error: {e}")
-            return None, [], False
+def draw_overlay(frame: np.ndarray, is_violent: bool, conf: float) -> np.ndarray:
+    """Draw overlay directly on the FULL original frame — no cropping."""
+    h, w   = frame.shape[:2]
+    label  = "⚠ VIOLENCE DETECTED" if is_violent else "✓ No Violence"
+    color  = (0, 0, 210) if is_violent else (30, 180, 30)   # BGR
+
+    # ── Top banner (semi-transparent) ────────────────────────────────────────
+    banner_h = 58
+    overlay  = frame.copy()
+    cv2.rectangle(overlay, (0, 0), (w, banner_h), color, -1)
+    cv2.addWeighted(overlay, 0.50, frame, 0.50, 0, frame)
+
+    # Label
+    cv2.putText(frame, label, (14, 40),
+                cv2.FONT_HERSHEY_DUPLEX, 1.05, (255, 255, 255), 2, cv2.LINE_AA)
+
+    # Confidence % on the right
+    conf_txt = f"{conf * 100:.1f}%"
+    (tw, _), _ = cv2.getTextSize(conf_txt, cv2.FONT_HERSHEY_SIMPLEX, 0.9, 2)
+    cv2.putText(frame, conf_txt, (w - tw - 14, 40),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 255, 255), 2, cv2.LINE_AA)
+
+    # ── Confidence bar (very top, 6 px tall) ─────────────────────────────────
+    bar_w = int(w * conf)
+    cv2.rectangle(frame, (0, 0), (bar_w, 6), color, -1)
+    cv2.rectangle(frame, (0, 0), (w,     6), (80, 80, 80), 1)   # border
+
+    # ── Timestamp (bottom-left) ───────────────────────────────────────────────
+    ts = datetime.now().strftime("%Y-%m-%d  %H:%M:%S")
+    cv2.putText(frame, ts, (14, h - 12),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.48, (210, 210, 210), 1, cv2.LINE_AA)
+
+    return frame
 
 
-camera = VideoCamera()
+def open_log(path):
+    if path is None:
+        return None
+    f = open(path, "a", encoding="utf-8")
+    f.write(f"\n{'='*60}\nSession started: {datetime.now()}\n{'='*60}\n")
+    return f
 
-@app.route('/')
-def index():
-    return render_template('index.html')
 
-@app.route('/process_frame', methods=['POST'])
-def process_frame():
-    try:
-        image_data = request.files['frame'].read()
-        frame_bytes, detections, fight = camera.get_frame(image_data)
-        
-        if frame_bytes:
-            b64 = base64.b64encode(frame_bytes).decode('utf-8')
-            return jsonify({'success': True, 'frame': b64, 'detections': detections, 'fight': bool(fight)})
-        
-        return jsonify({'success': False, 'throttled': True})
-    
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)})
+def run(source):
+    model = load_violence_model(MODEL_PATH)
 
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=False, threaded=True)
+    src = int(source) if str(source).isdigit() else source
+    cap = cv2.VideoCapture(src)
+    if not cap.isOpened():
+        raise RuntimeError(f"Cannot open video source: {source}")
+
+    # Try to set maximum buffer size = 1 to reduce latency on webcam
+    cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+
+    fps    = cap.get(cv2.CAP_PROP_FPS) or 30.0
+    width  = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    print(f"[INFO] Source  : {source}")
+    print(f"[INFO] Size    : {width}x{height} @ {fps:.1f} fps")
+
+    writer = None
+    if SAVE_VIDEO:
+        out_path = f"output_{datetime.now().strftime('%Y%m%d_%H%M%S')}.mp4"
+        fourcc   = cv2.VideoWriter_fourcc(*"mp4v")
+        writer   = cv2.VideoWriter(out_path, fourcc, fps, (width, height))
+        print(f"[INFO] Saving output to: {out_path}")
+
+    log_f          = open_log(LOG_FILE)
+    frame_buffer   = deque(maxlen=max(SEQUENCE_LEN, 1))
+    frame_count    = 0
+    violence_count = 0
+    t_start        = time.time()
+    is_violent     = False
+    conf           = 0.0
+
+    # Pre-warm: create a named window so it appears full-size immediately
+    cv2.namedWindow("Violence Detector  (Q = quit)", cv2.WINDOW_NORMAL)
+
+    print("[INFO] Running — press  Q  to quit.\n")
+
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            print("[INFO] End of stream.")
+            break
+
+        frame_count += 1
+        frame_buffer.append(preprocess_frame(frame))
+
+        # ── Run inference every INFER_EVERY_N frames ──────────────────────────
+        if frame_count % INFER_EVERY_N == 0:
+            is_violent, conf = predict(model, frame_buffer)
+
+            if is_violent:
+                violence_count += 1
+                ts  = datetime.now().strftime("%H:%M:%S.%f")[:-3]
+                msg = f"[ALERT] Violence | frame {frame_count:6d} | conf {conf:.3f} | {ts}"
+                print(msg)
+                if log_f:
+                    log_f.write(msg + "\n")
+                    log_f.flush()
+
+        # ── Draw on FULL frame (no resizing/cropping for display) ─────────────
+        annotated = draw_overlay(frame, is_violent, conf)   # modifies frame in-place copy
+
+        if writer:
+            writer.write(annotated)
+
+        cv2.imshow("Violence Detector  (Q = quit)", annotated)
+
+        # waitKey(1) = fastest possible; increase to ~int(1000/fps) to match source speed
+        if cv2.waitKey(1) & 0xFF == ord("q"):
+            print("[INFO] User quit.")
+            break
+
+    # ── Clean up ──────────────────────────────────────────────────────────────
+    elapsed = time.time() - t_start
+    cap.release()
+    if writer:
+        writer.release()
+    cv2.destroyAllWindows()
+
+    if log_f:
+        log_f.write(
+            f"\nSession ended    : {datetime.now()}\n"
+            f"Frames processed : {frame_count}\n"
+            f"Violence frames  : {violence_count}\n"
+            f"Elapsed time     : {elapsed:.1f}s\n"
+        )
+        log_f.close()
+
+    print(f"\n[SUMMARY] Frames: {frame_count} | Violence: {violence_count} | Time: {elapsed:.1f}s")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Violence Detection — modelnew.h5")
+    parser.add_argument("--source",    default="0",         help="Webcam index or video file path")
+    parser.add_argument("--model",     default=MODEL_PATH,  help="Path to .h5 model")
+    parser.add_argument("--threshold", type=float, default=THRESHOLD, help="Confidence threshold 0-1")
+    parser.add_argument("--every",     type=int,   default=INFER_EVERY_N,
+                        help="Run inference every N frames (default 2, lower=more accurate/slower)")
+    args = parser.parse_args()
+
+    MODEL_PATH    = args.model
+    THRESHOLD     = args.threshold
+    INFER_EVERY_N = args.every
+
+    run(args.source)
