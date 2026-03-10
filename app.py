@@ -1,5 +1,5 @@
 """
-Violence + Littering Detection  — OPTIMIZED
+Violence + Littering Detection  — OPTIMIZED  (+ Person Counter)
 ---------------------------------------------
 Optimizations applied:
   1. Parallel inference  — violence & litter models run in separate threads
@@ -10,6 +10,7 @@ Optimizations applied:
   6. Frame buffer queue — decouples capture from inference, no dropped frames
   7. Half-precision (FP16) for YOLO on GPU — 2x speed boost
   8. Warmup pass — avoids first-frame slowdown
+  9. Person counter — counts people in frame using YOLO's class 0 (person)
 
 Usage:
     python app.py                          # webcam, both models (default)
@@ -49,6 +50,17 @@ VIOLENCE_CLASS      = 1
 VIOLENCE_THRESHOLD  = 0.60
 LITTER_THRESHOLD    = 0.40
 YOLO_IMGSZ          = 320
+
+# Person counter: YOLO class ID for "person" (class 0 in COCO).
+# If your custom litter model uses a different class ID for person,
+# change PERSON_CLASS_ID accordingly. Set to -1 to use a separate
+# YOLOv8n model for person detection (see PERSON_MODEL_PATH below).
+PERSON_CLASS_ID     = 0          # 0 = 'person' in COCO-pretrained models
+PERSON_THRESHOLD    = 0.40       # confidence threshold for person detections
+# Optional: path to a separate COCO-pretrained model used *only* for
+# person counting (e.g. "yolov8n.pt"). Leave as "" to reuse the litter
+# model (best.pt) which is the default behaviour.
+PERSON_MODEL_PATH   = "yolov8n.pt"
 
 SAVE_VIDEO          = True
 LOG_FILE            = "detections.log"
@@ -139,6 +151,20 @@ def load_litter_model(path: str):
     return YOLO(path)
 
 
+def load_person_model(litter_model):
+    """
+    Returns the model used for person counting.
+    - If PERSON_MODEL_PATH is set and exists, load that dedicated model.
+    - Otherwise reuse the already-loaded litter model (zero extra cost).
+    """
+    if PERSON_MODEL_PATH and os.path.exists(PERSON_MODEL_PATH):
+        print(f"[INFO] Loading dedicated person-counter model: {PERSON_MODEL_PATH}")
+        from ultralytics import YOLO
+        return YOLO(PERSON_MODEL_PATH)
+    print(f"[INFO] Person counter: reusing litter model (class id={PERSON_CLASS_ID})")
+    return litter_model   # same object — no extra memory
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 #  INFERENCE HELPERS
 # ══════════════════════════════════════════════════════════════════════════════
@@ -190,13 +216,37 @@ def predict_litter(l_model, frame: np.ndarray):
         if result.boxes is None:
             continue
         for box in result.boxes:
+            cls_id = int(box.cls[0])
+            # Skip person class — handled separately by person counter
+            if cls_id == PERSON_CLASS_ID and not PERSON_MODEL_PATH:
+                continue
             x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
             conf_val        = float(box.conf[0])
-            cls_id          = int(box.cls[0])
             label           = l_model.names.get(cls_id, str(cls_id))
             detections.append({'bbox': (x1, y1, x2, y2), 'conf': conf_val, 'label': label})
             is_littering    = True
     return is_littering, detections
+
+
+def predict_persons(p_model, frame: np.ndarray):
+    """
+    Count people in frame.
+    Returns (person_count, list of person detection dicts).
+    Each dict: {'bbox': (x1,y1,x2,y2), 'conf': float}
+    """
+    results = p_model.predict(frame, conf=PERSON_THRESHOLD, imgsz=YOLO_IMGSZ,
+                              classes=[PERSON_CLASS_ID], verbose=False, half=_use_half())
+    persons = []
+    for result in results:
+        if result.boxes is None:
+            continue
+        for box in result.boxes:
+            if int(box.cls[0]) != PERSON_CLASS_ID:
+                continue
+            x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
+            conf_val        = float(box.conf[0])
+            persons.append({'bbox': (x1, y1, x2, y2), 'conf': conf_val})
+    return len(persons), persons
 
 
 def has_motion(prev_gray, curr_gray) -> bool:
@@ -209,7 +259,8 @@ def has_motion(prev_gray, curr_gray) -> bool:
 #  DRAWING
 # ══════════════════════════════════════════════════════════════════════════════
 
-def draw_overlay(frame, is_violent, v_conf, is_littering, litter_detections, fps_display):
+def draw_overlay(frame, is_violent, v_conf, is_littering, litter_detections,
+                 person_count, person_detections, fps_display):
     h, w = frame.shape[:2]
 
     run_v = MODE in ("both", "violence")
@@ -235,9 +286,8 @@ def draw_overlay(frame, is_violent, v_conf, is_littering, litter_detections, fps
         else:
             color = (30, 180, 30); label = "✓  No Littering"
 
-    # Mode badge (top-right corner, small)
+    # ── Top banner ────────────────────────────────────────────────────────────
     mode_label = f"MODE: {MODE.upper()}"
-
     overlay = frame.copy()
     cv2.rectangle(overlay, (0, 0), (w, 58), color, -1)
     cv2.addWeighted(overlay, 0.50, frame, 0.50, 0, frame)
@@ -245,7 +295,7 @@ def draw_overlay(frame, is_violent, v_conf, is_littering, litter_detections, fps
     cv2.putText(frame, label, (14, 40),
                 cv2.FONT_HERSHEY_DUPLEX, 0.95, (255, 255, 255), 2, cv2.LINE_AA)
 
-    # Right side: violence conf (if active) + fps + mode
+    # Right side: violence conf (if active) + fps
     if run_v:
         right_txt = f"Fight:{v_conf*100:.0f}%  {fps_display:.0f}fps"
     else:
@@ -260,13 +310,51 @@ def draw_overlay(frame, is_violent, v_conf, is_littering, litter_detections, fps
     cv2.putText(frame, mode_label, (w - mw - 10, 62 + mh + 2),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1, cv2.LINE_AA)
 
-    # Confidence bar (violence only, hidden in litter-only mode)
+    # Confidence bar (violence only)
     if run_v:
         v_color = (0, 0, 210) if is_violent else (30, 180, 30)
         cv2.rectangle(frame, (0, 0), (int(w * v_conf), 6), v_color, -1)
         cv2.rectangle(frame, (0, 0), (w, 6), (80, 80, 80), 1)
 
-    # Littering boxes
+    # ── Person counter badge (bottom-right corner) ────────────────────────────
+    # Draw person bounding boxes (cyan)
+    for p in person_detections:
+        x1, y1, x2, y2 = p['bbox']
+        cv2.rectangle(frame, (x1, y1), (x2, y2), (255, 200, 0), 2)
+        # Small confidence label on each person box
+        ptag = f"person {p['conf']*100:.0f}%"
+        (plw, plh), pbl = cv2.getTextSize(ptag, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
+        pty1 = max(y1 - plh - pbl - 4, 0)
+        cv2.rectangle(frame, (x1, pty1), (x1 + plw + 6, y1 + pbl), (255, 200, 0), -1)
+        cv2.putText(frame, ptag, (x1 + 3, y1),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (20, 20, 20), 1, cv2.LINE_AA)
+
+    # Large person count badge — bottom-right
+    badge_txt   = f"👤 {person_count}"
+    badge_label = "PERSONS"
+    badge_w, badge_h = 110, 60
+    bx1 = w - badge_w - 10
+    by1 = h - badge_h - 10
+    bx2, by2 = w - 10, h - 10
+
+    badge_bg = (50, 50, 50)
+    cv2.rectangle(frame, (bx1, by1), (bx2, by2), badge_bg, -1)
+    cv2.rectangle(frame, (bx1, by1), (bx2, by2), (255, 200, 0), 2)
+
+    # Sub-label "PERSONS"
+    (slw, slh), _ = cv2.getTextSize(badge_label, cv2.FONT_HERSHEY_SIMPLEX, 0.42, 1)
+    cv2.putText(frame, badge_label,
+                (bx1 + (badge_w - slw) // 2, by1 + slh + 6),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.42, (255, 200, 0), 1, cv2.LINE_AA)
+
+    # Big count number
+    count_str = str(person_count)
+    (nw, nh), _ = cv2.getTextSize(count_str, cv2.FONT_HERSHEY_DUPLEX, 1.5, 3)
+    cv2.putText(frame, count_str,
+                (bx1 + (badge_w - nw) // 2, by2 - 10),
+                cv2.FONT_HERSHEY_DUPLEX, 1.5, (255, 255, 255), 3, cv2.LINE_AA)
+
+    # ── Littering boxes ───────────────────────────────────────────────────────
     if run_l:
         for det in litter_detections:
             x1, y1, x2, y2 = det['bbox']
@@ -282,6 +370,7 @@ def draw_overlay(frame, is_violent, v_conf, is_littering, litter_detections, fps
             cv2.putText(frame, f"Litter objects: {len(litter_detections)}", (14, 80),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.65, (0, 200, 255), 2, cv2.LINE_AA)
 
+    # ── Timestamp ─────────────────────────────────────────────────────────────
     cv2.putText(frame, datetime.now().strftime("%Y-%m-%d  %H:%M:%S"), (14, h - 12),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.48, (210, 210, 210), 1, cv2.LINE_AA)
     return frame
@@ -293,10 +382,11 @@ def draw_overlay(frame, is_violent, v_conf, is_littering, litter_detections, fps
 
 class InferenceWorker(threading.Thread):
     """Runs active models in background. Respects MODE to skip unused models."""
-    def __init__(self, v_model_bundle, l_model, in_q, out_q, log_f):
+    def __init__(self, v_model_bundle, l_model, p_model, in_q, out_q, log_f):
         super().__init__(daemon=True)
         self.v_model   = v_model_bundle   # None if MODE == "litter"
         self.l_model   = l_model          # None if MODE == "violence"
+        self.p_model   = p_model          # always set (person counter)
         self.in_q      = in_q
         self.out_q     = out_q
         self.log_f     = log_f
@@ -315,6 +405,7 @@ class InferenceWorker(threading.Thread):
 
             v_res = [False, 0.0]
             l_res = [False, []]
+            p_res = [0, []]       # person count, person detections
 
             threads = []
 
@@ -329,11 +420,17 @@ class InferenceWorker(threading.Thread):
                 t = threading.Thread(target=run_lf)
                 threads.append(t)
 
+            # Person counter always runs (uses p_model which may == l_model)
+            def run_pf(): p_res[0], p_res[1] = predict_persons(self.p_model, frame)
+            t = threading.Thread(target=run_pf)
+            threads.append(t)
+
             for t in threads: t.start()
             for t in threads: t.join()
 
-            is_violent, v_conf     = v_res
-            is_littering, litter_d = l_res
+            is_violent, v_conf       = v_res
+            is_littering, litter_d   = l_res
+            person_count, person_d   = p_res
 
             ts = datetime.now().strftime("%H:%M:%S.%f")[:-3]
             if run_v and is_violent:
@@ -344,11 +441,18 @@ class InferenceWorker(threading.Thread):
                 msg = f"[ALERT] Littering | frame {frame_count:6d} | objects {len(litter_d)} | {ts}"
                 print(msg)
                 if self.log_f: self.log_f.write(msg + "\n"); self.log_f.flush()
+            if person_count > 0:
+                msg = f"[INFO]  Persons   | frame {frame_count:6d} | count {person_count} | {ts}"
+                # Only print person count when it changes — avoids console spam
+                # (comment out the next line if you want every-frame logging)
+                # print(msg)
+                if self.log_f: self.log_f.write(msg + "\n"); self.log_f.flush()
 
             if self.out_q.full():
                 try: self.out_q.get_nowait()
                 except queue.Empty: pass
-            self.out_q.put((is_violent, v_conf, is_littering, litter_d))
+            self.out_q.put((is_violent, v_conf, is_littering, litter_d,
+                            person_count, person_d))
             self.in_q.task_done()
 
 
@@ -363,7 +467,7 @@ def open_log(path):
     return f
 
 
-def warmup(v_model, l_model):
+def warmup(v_model, l_model, p_model):
     print("[INFO] Warming up models ...")
     dummy = np.zeros((480, 640, 3), dtype=np.uint8)
     if v_model is not None:
@@ -371,6 +475,9 @@ def warmup(v_model, l_model):
         predict_violence(v_model, buf)
     if l_model is not None:
         predict_litter(l_model, dummy)
+    # Warm up person model only if it's a separate object
+    if p_model is not None and p_model is not l_model:
+        predict_persons(p_model, dummy)
     print("[INFO] Warmup done.")
 
 
@@ -379,11 +486,24 @@ def run(source):
     run_l = MODE in ("both", "litter")
 
     print(f"[INFO] Mode: {MODE.upper()}  —  "
-          f"Violence={'ON' if run_v else 'OFF'}  |  Littering={'ON' if run_l else 'OFF'}")
+          f"Violence={'ON' if run_v else 'OFF'}  |  Littering={'ON' if run_l else 'OFF'}  |  "
+          f"PersonCounter=ON")
 
-    v_model = load_violence_model(VIOLENCE_H5_PATH, VIOLENCE_ONNX_PATH) if run_v else None
-    l_model = load_litter_model(LITTER_MODEL_PATH)                       if run_l else None
-    warmup(v_model, l_model)
+    v_model  = load_violence_model(VIOLENCE_H5_PATH, VIOLENCE_ONNX_PATH) if run_v else None
+    l_model  = load_litter_model(LITTER_MODEL_PATH)                       if run_l else None
+
+    # Person model: dedicated or reuse litter model
+    # If only violence mode is active (no litter model), load a fallback.
+    if run_l:
+        p_model = load_person_model(l_model)
+    else:
+        # No litter model loaded — load a small COCO model for person counting
+        fallback = PERSON_MODEL_PATH if PERSON_MODEL_PATH else "yolov8n.pt"
+        print(f"[INFO] Violence-only mode: loading person model from {fallback}")
+        from ultralytics import YOLO
+        p_model = YOLO(fallback)
+
+    warmup(v_model, l_model, p_model)
 
     src = int(source) if str(source).isdigit() else source
     cap = cv2.VideoCapture(src)
@@ -405,7 +525,7 @@ def run(source):
     log_f  = open_log(LOG_FILE)
     in_q   = queue.Queue(maxsize=MAX_QUEUE_DEPTH)
     out_q  = queue.Queue(maxsize=MAX_QUEUE_DEPTH)
-    worker = InferenceWorker(v_model, l_model, in_q, out_q, log_f)
+    worker = InferenceWorker(v_model, l_model, p_model, in_q, out_q, log_f)
     worker.start()
 
     frame_count    = 0
@@ -414,6 +534,8 @@ def run(source):
     v_conf         = 0.0
     is_littering   = False
     litter_dets    = []
+    person_count   = 0
+    person_dets    = []
     fps_display    = 0.0
     t_fps          = time.time()
     fps_counter    = 0
@@ -434,7 +556,7 @@ def run(source):
             print("[INFO] End of stream.")
             break
 
-        # ── FPS cap — sleep out any remaining time in this frame slot ─────────
+        # ── FPS cap ───────────────────────────────────────────────────────────
         if frame_interval > 0:
             now     = time.time()
             elapsed_since_last = now - t_last_frame
@@ -458,13 +580,16 @@ def run(source):
                 in_q.put_nowait((frame.copy(), frame_count))
 
         try:
-            is_violent, v_conf, is_littering, litter_dets = out_q.get_nowait()
+            (is_violent, v_conf,
+             is_littering, litter_dets,
+             person_count, person_dets) = out_q.get_nowait()
             if is_violent:   violence_count += 1
             if is_littering: litter_count   += 1
         except queue.Empty:
             pass
 
-        annotated = draw_overlay(frame, is_violent, v_conf, is_littering, litter_dets, fps_display)
+        annotated = draw_overlay(frame, is_violent, v_conf, is_littering, litter_dets,
+                                 person_count, person_dets, fps_display)
         if writer: writer.write(annotated)
         cv2.imshow(win_title, annotated)
 
@@ -506,6 +631,13 @@ if __name__ == "__main__":
     parser.add_argument("--violence-model",      default=VIOLENCE_H5_PATH)
     parser.add_argument("--violence-onnx",       default=VIOLENCE_ONNX_PATH)
     parser.add_argument("--litter-model",        default=LITTER_MODEL_PATH)
+    parser.add_argument("--person-model",        default=PERSON_MODEL_PATH,
+                        help="Optional separate COCO model for person counting (e.g. yolov8n.pt). "
+                             "Leave blank to reuse the litter model.")
+    parser.add_argument("--person-class-id",     type=int, default=PERSON_CLASS_ID,
+                        help="YOLO class ID for 'person' (default 0 = COCO person)")
+    parser.add_argument("--person-threshold",    type=float, default=PERSON_THRESHOLD,
+                        help="Confidence threshold for person detection (default 0.40)")
     parser.add_argument("--violence-threshold",  type=float, default=VIOLENCE_THRESHOLD)
     parser.add_argument("--litter-threshold",    type=float, default=LITTER_THRESHOLD)
     parser.add_argument("--yolo-size",           type=int,   default=YOLO_IMGSZ,
@@ -522,6 +654,9 @@ if __name__ == "__main__":
     VIOLENCE_H5_PATH   = args.violence_model
     VIOLENCE_ONNX_PATH = args.violence_onnx
     LITTER_MODEL_PATH  = args.litter_model
+    PERSON_MODEL_PATH  = args.person_model
+    PERSON_CLASS_ID    = args.person_class_id
+    PERSON_THRESHOLD   = args.person_threshold
     VIOLENCE_THRESHOLD = args.violence_threshold
     LITTER_THRESHOLD   = args.litter_threshold
     YOLO_IMGSZ         = args.yolo_size
