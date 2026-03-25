@@ -1,17 +1,17 @@
 """
-Violence + Littering + Fire/Smoke Detection  — OPTIMIZED  (+ Person Counter)
+Violence + Littering + Fire/Smoke Detection  -- OPTIMIZED  (+ Person Counter)
 -----------------------------------------------------------------------------
 Optimizations applied:
-  1. Parallel inference  — all models run in separate threads
-  2. Separate display thread — UI never blocks on inference
-  3. Smart frame skipping — skips frames where scene hasn't changed (motion diff)
-  4. ONNX runtime for violence model — faster than TensorFlow on CPU
-  5. Reduced YOLO input size — configurable (default 320 instead of 640)
-  6. Frame buffer queue — decouples capture from inference, no dropped frames
-  7. Half-precision (FP16) for YOLO on GPU — 2x speed boost
-  8. Warmup pass — avoids first-frame slowdown
-  9. Person counter — counts people in frame using YOLO class 0
- 10. Fire/Smoke detector — dedicated bestfire.pt model, runs in parallel
+  1. Parallel inference  -- all models run in separate threads
+  2. Separate display thread -- UI never blocks on inference
+  3. Smart frame skipping -- skips frames where scene hasn't changed (motion diff)
+  4. ONNX runtime for violence model -- faster than TensorFlow on CPU
+  5. ONNX runtime for litter model  -- yolov8s.onnx, faster than .pt on CPU
+  6. Reduced YOLO input size -- configurable (default 320 instead of 640)
+  7. Frame buffer queue -- decouples capture from inference, no dropped frames
+  8. Warmup pass -- avoids first-frame slowdown
+  9. Person counter -- counts people in frame using YOLO class 0
+ 10. Fire/Smoke detector -- dedicated Fire_best.pt model, runs in parallel
 
 Usage:
     python app.py                          # webcam, all models (default)
@@ -37,20 +37,23 @@ import queue
 from collections import deque
 from datetime import datetime
 
-# ─────────────────────────────────────────────────────────────────────────────
+# ------------------------------------------------------------------------------
 # CONFIGURATION
-# ─────────────────────────────────────────────────────────────────────────────
+# ------------------------------------------------------------------------------
 VIOLENCE_H5_PATH    = "modelnew.h5"
 VIOLENCE_ONNX_PATH  = "modelnew.onnx"
-LITTER_MODEL_PATH   = "best.pt"
-FIRE_MODEL_PATH     = "Fire_best.pt"       # fire + smoke detection model
+LITTER_MODEL_PATH   = "yolov8s.onnx"   # uses ONNX litter model
+FIRE_MODEL_PATH     = "Fire_best.pt"
+
+# Litter class names -- edit to match your yolov8s.onnx training classes
+LITTER_CLASS_NAMES  = {0: "litter"}    # e.g. {0:"bottle", 1:"bag", 2:"wrapper"}
 
 IMG_SIZE            = (128, 128)
 SEQUENCE_LEN        = 1
 VIOLENCE_CLASS      = 1
 VIOLENCE_THRESHOLD  = 0.80
 LITTER_THRESHOLD    = 0.40
-FIRE_THRESHOLD      = 0.40               # confidence threshold for fire/smoke
+FIRE_THRESHOLD      = 0.40
 YOLO_IMGSZ          = 320
 
 # Person counter
@@ -58,7 +61,6 @@ PERSON_CLASS_ID     = 0
 PERSON_THRESHOLD    = 0.40
 PERSON_MODEL_PATH   = ""
 
-# Fire detection toggle (overridden by --no-fire flag)
 ENABLE_FIRE         = True
 
 SAVE_VIDEO          = True
@@ -67,14 +69,35 @@ MOTION_THRESHOLD    = 10
 MAX_QUEUE_DEPTH     = 2
 FPS_CAP             = 30
 
-# Detection mode for violence + litter: "both" | "violence" | "litter"
 MODE                = "both"
-# ─────────────────────────────────────────────────────────────────────────────
+# ------------------------------------------------------------------------------
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-#  ONE-TIME CONVERSION:  .h5  →  .onnx
-# ══════════════════════════════════════════════════════════════════════════════
+# ==============================================================================
+#  HELPERS
+# ==============================================================================
+
+def _ort_providers():
+    """Return ONNX Runtime providers that are actually available on this machine.
+    Avoids the UserWarning when CUDA is listed but not installed."""
+    import onnxruntime as ort
+    available = ort.get_available_providers()
+    if "CUDAExecutionProvider" in available:
+        return ["CUDAExecutionProvider", "CPUExecutionProvider"]
+    return ["CPUExecutionProvider"]
+
+
+def _use_half() -> bool:
+    try:
+        import torch
+        return torch.cuda.is_available()
+    except ImportError:
+        return False
+
+
+# ==============================================================================
+#  ONE-TIME CONVERSION:  .h5  ->  .onnx  (violence model)
+# ==============================================================================
 
 def convert_h5_to_onnx(h5_path: str, onnx_path: str):
     import tensorflow as tf
@@ -102,24 +125,24 @@ def convert_h5_to_onnx(h5_path: str, onnx_path: str):
     import onnx
     onnx.save(model_proto, onnx_path)
     print(f"[CONVERT] Saved to: {onnx_path}")
-    print("[CONVERT] Now run the app normally — it will use the .onnx file automatically.")
+    print("[CONVERT] Now run the app normally -- it will use the .onnx file automatically.")
 
 
-# ══════════════════════════════════════════════════════════════════════════════
+# ==============================================================================
 #  MODEL LOADERS
-# ══════════════════════════════════════════════════════════════════════════════
+# ==============================================================================
 
 def load_violence_model(h5_path: str, onnx_path: str):
     if os.path.exists(onnx_path):
         print(f"[INFO] Loading violence model (ONNX): {onnx_path}")
         import onnxruntime as ort
-        providers  = ["CUDAExecutionProvider", "CPUExecutionProvider"]
+        providers  = _ort_providers()
         sess       = ort.InferenceSession(onnx_path, providers=providers)
         input_name = sess.get_inputs()[0].name
-        print(f"[INFO] ONNX providers active: {sess.get_providers()}")
+        print(f"[INFO] Violence ONNX providers active: {sess.get_providers()}")
         return ("onnx", sess, input_name)
     else:
-        print(f"[INFO] ONNX not found — using Keras: {h5_path}")
+        print(f"[INFO] ONNX not found -- using Keras: {h5_path}")
         print("[TIP]  Run  python app.py --convert-onnx  once for a speed boost.")
         import tensorflow as tf
         tf.get_logger().setLevel("ERROR")
@@ -137,15 +160,61 @@ def load_violence_model(h5_path: str, onnx_path: str):
         return ("keras", model, None)
 
 
-def load_litter_model(path: str):
-    if not os.path.exists(path):
-        raise FileNotFoundError(f"Littering model not found: '{path}'")
-    print(f"[INFO] Loading littering model (YOLOv8): {path}")
+def _export_litter_onnx(onnx_path: str):
+    """Export yolov8s.pt to onnx_path. Called when the file is missing or corrupt."""
+    print(f"[INFO] Exporting yolov8s.pt -> {onnx_path}  (one-time, may take a minute) ...")
     try:
         from ultralytics import YOLO
     except ImportError:
         raise ImportError("Run:  pip install ultralytics")
-    return YOLO(path)
+    mdl      = YOLO("yolov8s.pt")          # auto-downloads if not present
+    exported = str(mdl.export(format="onnx", imgsz=640, opset=12, dynamic=False))
+    if os.path.abspath(exported) != os.path.abspath(onnx_path):
+        import shutil
+        shutil.move(exported, onnx_path)
+    print(f"[INFO] Export complete -> {onnx_path}")
+
+
+def load_litter_model(path: str):
+    """
+    Load litter model from a YOLOv8s ONNX file via onnxruntime.
+    If the file is missing OR corrupt it is auto-exported from yolov8s.pt.
+    """
+    import onnxruntime as ort
+
+    # Auto-export if file is missing
+    if not os.path.exists(path):
+        print(f"[WARN] Litter ONNX not found at '{path}' -- exporting now ...")
+        _export_litter_onnx(path)
+
+    # Use only providers that are actually available (no CUDA warning on CPU machines)
+    providers = _ort_providers()
+
+    # Try to load; if corrupt re-export once and retry
+    sess = None
+    for attempt in range(2):
+        try:
+            print(f"[INFO] Loading littering model (YOLOv8s ONNX): {path}")
+            sess = ort.InferenceSession(path, providers=providers)
+            break
+        except Exception as exc:
+            if attempt == 0:
+                print(f"[WARN] Failed to load '{path}': {exc}")
+                print("[WARN] File may be corrupt -- re-exporting ...")
+                _export_litter_onnx(path)
+            else:
+                raise RuntimeError(
+                    f"Could not load litter ONNX after re-export: {exc}"
+                ) from exc
+
+    print(f"[INFO] Litter ONNX providers active: {sess.get_providers()}")
+
+    # Resolve model input spatial dims (may be dynamic -> default 640)
+    shape = sess.get_inputs()[0].shape
+    h_in  = shape[2] if isinstance(shape[2], int) else 640
+    w_in  = shape[3] if isinstance(shape[3], int) else 640
+    print(f"[INFO] Litter model input size: {w_in}x{h_in}")
+    return ("onnx", sess, h_in, w_in)
 
 
 def load_fire_model(path: str):
@@ -158,18 +227,24 @@ def load_fire_model(path: str):
     return mdl
 
 
-def load_person_model(litter_model):
+def load_person_model():
+    """
+    Person counter always uses a dedicated model.
+    Litter model is ONNX so it cannot be reused for person detection.
+    """
     if PERSON_MODEL_PATH and os.path.exists(PERSON_MODEL_PATH):
         print(f"[INFO] Loading dedicated person-counter model: {PERSON_MODEL_PATH}")
         from ultralytics import YOLO
         return YOLO(PERSON_MODEL_PATH)
-    print(f"[INFO] Person counter: reusing litter model (class id={PERSON_CLASS_ID})")
-    return litter_model
+    fallback = "yolov8n.pt"
+    print(f"[INFO] Person counter: loading {fallback} (litter model is ONNX -- cannot reuse)")
+    from ultralytics import YOLO
+    return YOLO(fallback)
 
 
-# ══════════════════════════════════════════════════════════════════════════════
+# ==============================================================================
 #  INFERENCE HELPERS
-# ══════════════════════════════════════════════════════════════════════════════
+# ==============================================================================
 
 def preprocess_frame_violence(frame: np.ndarray) -> np.ndarray:
     rgb     = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -201,39 +276,59 @@ def predict_violence(v_model_bundle, frame_buffer: deque):
     return is_violent, conf
 
 
-def _use_half() -> bool:
-    try:
-        import torch
-        return torch.cuda.is_available()
-    except ImportError:
-        return False
-
-
 def predict_litter(l_model, frame: np.ndarray):
-    results      = l_model.predict(frame, conf=LITTER_THRESHOLD, imgsz=YOLO_IMGSZ,
-                                   verbose=False, half=_use_half())
+    """
+    Run litter detection using a YOLOv8s ONNX session.
+    l_model tuple: ("onnx", session, h_in, w_in)
+    YOLOv8 ONNX output shape: [1, 4+num_classes, num_anchors]
+    """
+    _, sess, h_in, w_in = l_model
+
+    orig_h, orig_w = frame.shape[:2]
+
+    # Pre-process: BGR -> RGB, resize, normalise, NCHW
+    img = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    img = cv2.resize(img, (w_in, h_in))
+    img = img.astype(np.float32) / 255.0
+    img = np.transpose(img, (2, 0, 1))[np.newaxis]     # [1, 3, H, W]
+
+    input_name = sess.get_inputs()[0].name
+    output     = sess.run(None, {input_name: img})[0]   # [1, 4+nc, anchors]
+
+    # Transpose -> [anchors, 4+nc]
+    preds = output[0].T
+
+    x_scale = orig_w / w_in
+    y_scale = orig_h / h_in
+
     detections   = []
     is_littering = False
-    for result in results:
-        if result.boxes is None:
+
+    for pred in preds:
+        class_scores = pred[4:]
+        cls_id       = int(np.argmax(class_scores))
+        conf         = float(class_scores[cls_id])
+
+        if cls_id == PERSON_CLASS_ID:
+            continue                        # skip persons
+        if conf < LITTER_THRESHOLD:
             continue
-        for box in result.boxes:
-            cls_id = int(box.cls[0])
-            if cls_id == PERSON_CLASS_ID and not PERSON_MODEL_PATH:
-                continue
-            x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
-            conf_val        = float(box.conf[0])
-            label           = l_model.names.get(cls_id, str(cls_id))
-            detections.append({'bbox': (x1, y1, x2, y2), 'conf': conf_val, 'label': label})
-            is_littering    = True
+
+        # cx, cy, bw, bh (model-space) -> x1,y1,x2,y2 (original frame)
+        cx, cy, bw, bh = pred[:4]
+        x1 = int((cx - bw / 2) * x_scale)
+        y1 = int((cy - bh / 2) * y_scale)
+        x2 = int((cx + bw / 2) * x_scale)
+        y2 = int((cy + bh / 2) * y_scale)
+
+        label        = LITTER_CLASS_NAMES.get(cls_id, str(cls_id))
+        detections.append({'bbox': (x1, y1, x2, y2), 'conf': conf, 'label': label})
+        is_littering = True
+
     return is_littering, detections
 
 
 def predict_fire(f_model, frame: np.ndarray):
-    """
-    Run fire/smoke model. Returns (is_fire, is_smoke, detections).
-    Each detection: {'bbox', 'conf', 'label'} where label is e.g. 'fire' or 'smoke'.
-    """
     results    = f_model.predict(frame, conf=FIRE_THRESHOLD, imgsz=YOLO_IMGSZ,
                                  verbose=False, half=_use_half())
     detections = []
@@ -253,7 +348,6 @@ def predict_fire(f_model, frame: np.ndarray):
             elif 'smoke' in label:
                 is_smoke = True
             else:
-                # Unknown class from this model — treat as fire-related
                 is_fire  = True
     return is_fire, is_smoke, detections
 
@@ -280,9 +374,9 @@ def has_motion(prev_gray, curr_gray) -> bool:
     return float(cv2.absdiff(prev_gray, curr_gray).mean()) > MOTION_THRESHOLD
 
 
-# ══════════════════════════════════════════════════════════════════════════════
+# ==============================================================================
 #  DRAWING
-# ══════════════════════════════════════════════════════════════════════════════
+# ==============================================================================
 
 def draw_overlay(frame,
                  is_violent, v_conf,
@@ -296,7 +390,7 @@ def draw_overlay(frame,
     run_l = MODE in ("both", "litter")
     run_f = ENABLE_FIRE
 
-    # ── Banner colour & label — fire takes highest priority ───────────────────
+    # Banner colour & label -- fire takes highest priority
     if run_f and (is_fire or is_smoke):
         if is_fire and is_smoke:
             color = (0, 60, 255);  label = "FIRE + SMOKE DETECTED"
@@ -313,7 +407,7 @@ def draw_overlay(frame,
     else:
         color = (30, 180, 30);     label = "All Clear"
 
-    # ── Top banner ─────────────────────────────────────────────────────────────
+    # Top banner
     overlay = frame.copy()
     cv2.rectangle(overlay, (0, 0), (w, 58), color, -1)
     cv2.addWeighted(overlay, 0.50, frame, 0.50, 0, frame)
@@ -345,9 +439,8 @@ def draw_overlay(frame,
         cv2.rectangle(frame, (0, 0), (int(w * v_conf), 6), v_color, -1)
         cv2.rectangle(frame, (0, 0), (w, 6), (80, 80, 80), 1)
 
-    # ── Fire / smoke bounding boxes ───────────────────────────────────────────
+    # Fire / smoke bounding boxes
     if run_f:
-        # Subtle red pulse overlay when fire is active
         if is_fire:
             pulse = frame.copy()
             cv2.rectangle(pulse, (0, 0), (w, h), (0, 0, 180), -1)
@@ -357,7 +450,6 @@ def draw_overlay(frame,
             x1, y1, x2, y2 = det['bbox']
             lbl             = det['label']
             conf_val        = det['conf']
-            # Fire = red-orange, Smoke = steel blue-grey
             box_color = (0, 60, 255) if 'fire' in lbl else (160, 120, 60)
             tag = f"{lbl} {conf_val*100:.0f}%"
             cv2.rectangle(frame, (x1, y1), (x2, y2), box_color, 2)
@@ -378,7 +470,7 @@ def draw_overlay(frame,
             cv2.putText(frame, "  ".join(parts), (14, 100),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.65, (0, 100, 255), 2, cv2.LINE_AA)
 
-    # ── Litter bounding boxes ─────────────────────────────────────────────────
+    # Litter bounding boxes
     if run_l:
         for det in litter_detections:
             x1, y1, x2, y2 = det['bbox']
@@ -393,7 +485,7 @@ def draw_overlay(frame,
             cv2.putText(frame, f"Litter objects: {len(litter_detections)}", (14, 80),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.65, (0, 200, 255), 2, cv2.LINE_AA)
 
-    # ── Person bounding boxes ─────────────────────────────────────────────────
+    # Person bounding boxes
     for p in person_detections:
         x1, y1, x2, y2 = p['bbox']
         cv2.rectangle(frame, (x1, y1), (x2, y2), (255, 200, 0), 2)
@@ -404,7 +496,7 @@ def draw_overlay(frame,
         cv2.putText(frame, ptag, (x1 + 3, y1),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, (20, 20, 20), 1, cv2.LINE_AA)
 
-    # ── Person count badge — bottom-right ─────────────────────────────────────
+    # Person count badge -- bottom-right
     badge_w, badge_h = 110, 60
     bx1 = w - badge_w - 10
     by1 = h - badge_h - 10
@@ -420,7 +512,7 @@ def draw_overlay(frame,
     cv2.putText(frame, count_str, (bx1 + (badge_w - nw) // 2, by2 - 10),
                 cv2.FONT_HERSHEY_DUPLEX, 1.5, (255, 255, 255), 3, cv2.LINE_AA)
 
-    # ── Fire status badge — bottom-left ───────────────────────────────────────
+    # Fire status badge -- bottom-left
     if run_f:
         fb_w, fb_h = 130, 60
         fbx1, fby1 = 10, h - fb_h - 10
@@ -445,15 +537,15 @@ def draw_overlay(frame,
         cv2.putText(frame, status_txt, (fbx1 + (fb_w - stw) // 2, fby2 - 10),
                     cv2.FONT_HERSHEY_DUPLEX, 0.75, (255, 255, 255), 2, cv2.LINE_AA)
 
-    # ── Timestamp ─────────────────────────────────────────────────────────────
+    # Timestamp
     cv2.putText(frame, datetime.now().strftime("%Y-%m-%d  %H:%M:%S"), (14, h - 12),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.48, (210, 210, 210), 1, cv2.LINE_AA)
     return frame
 
 
-# ══════════════════════════════════════════════════════════════════════════════
+# ==============================================================================
 #  THREADED INFERENCE WORKER
-# ══════════════════════════════════════════════════════════════════════════════
+# ==============================================================================
 
 class InferenceWorker(threading.Thread):
     def __init__(self, v_model_bundle, l_model, f_model, p_model, in_q, out_q, log_f):
@@ -541,9 +633,9 @@ class InferenceWorker(threading.Thread):
             self.in_q.task_done()
 
 
-# ══════════════════════════════════════════════════════════════════════════════
+# ==============================================================================
 #  MAIN LOOP
-# ══════════════════════════════════════════════════════════════════════════════
+# ==============================================================================
 
 def open_log(path):
     if not path: return None
@@ -563,7 +655,7 @@ def warmup(v_model, l_model, f_model, p_model):
         predict_litter(l_model, dummy)
     if f_model is not None:
         predict_fire(f_model, dummy)
-    if p_model is not None and p_model is not l_model:
+    if p_model is not None:
         predict_persons(p_model, dummy)
     print("[INFO] Warmup done.")
 
@@ -572,7 +664,7 @@ def run(source):
     run_v = MODE in ("both", "violence")
     run_l = MODE in ("both", "litter")
 
-    print(f"[INFO] Mode: {MODE.upper()}  —  "
+    print(f"[INFO] Mode: {MODE.upper()}  --  "
           f"Violence={'ON' if run_v else 'OFF'}  |  "
           f"Littering={'ON' if run_l else 'OFF'}  |  "
           f"Fire/Smoke={'ON' if ENABLE_FIRE else 'OFF'}  |  "
@@ -581,14 +673,7 @@ def run(source):
     v_model = load_violence_model(VIOLENCE_H5_PATH, VIOLENCE_ONNX_PATH) if run_v else None
     l_model = load_litter_model(LITTER_MODEL_PATH)                       if run_l else None
     f_model = load_fire_model(FIRE_MODEL_PATH)                           if ENABLE_FIRE else None
-
-    if run_l:
-        p_model = load_person_model(l_model)
-    else:
-        fallback = PERSON_MODEL_PATH if PERSON_MODEL_PATH else "yolov8n.pt"
-        print(f"[INFO] Violence-only mode: loading person model from {fallback}")
-        from ultralytics import YOLO
-        p_model = YOLO(fallback)
+    p_model = load_person_model()
 
     warmup(v_model, l_model, f_model, p_model)
 
@@ -615,14 +700,14 @@ def run(source):
     worker = InferenceWorker(v_model, l_model, f_model, p_model, in_q, out_q, log_f)
     worker.start()
 
-    frame_count   = 0
-    prev_gray     = None
-    is_violent    = False;  v_conf      = 0.0
-    is_littering  = False;  litter_dets = []
-    is_fire       = False;  is_smoke    = False;  fire_dets = []
-    person_count  = 0;      person_dets = []
-    fps_display   = 0.0
-    t_fps         = time.time();  fps_counter = 0
+    frame_count    = 0
+    prev_gray      = None
+    is_violent     = False;  v_conf      = 0.0
+    is_littering   = False;  litter_dets = []
+    is_fire        = False;  is_smoke    = False;  fire_dets = []
+    person_count   = 0;      person_dets = []
+    fps_display    = 0.0
+    t_fps          = time.time();  fps_counter = 0
     violence_count = 0;  litter_count = 0;  fire_count = 0;  smoke_count = 0
     t_start        = time.time()
     frame_interval = (1.0 / FPS_CAP) if FPS_CAP > 0 else 0.0
@@ -631,7 +716,7 @@ def run(source):
     win_title = "Detector [VIOLENCE+LITTER+FIRE]  (Q = quit)"
     cv2.namedWindow(win_title, cv2.WINDOW_NORMAL)
     print(f"[INFO] FPS cap: {FPS_CAP if FPS_CAP > 0 else 'disabled'}")
-    print("[INFO] Running — press  Q  to quit.\n")
+    print("[INFO] Running -- press  Q  to quit.\n")
 
     while True:
         ret, frame = cap.read()
@@ -711,23 +796,23 @@ def run(source):
           f"Fire:{fire_count} | Smoke:{smoke_count} | Time:{elapsed:.1f}s")
 
 
-# ─────────────────────────────────────────────────────────────────────────────
+# ------------------------------------------------------------------------------
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Violence + Littering + Fire/Smoke Detection — Optimized")
-    parser.add_argument("--source",              default="0")
+        description="Violence + Littering + Fire/Smoke Detection -- Optimized")
+    parser.add_argument("--source",              default="1")
     parser.add_argument("--mode",                default="both",
                         choices=["both", "violence", "litter"])
     parser.add_argument("--violence-model",      default=VIOLENCE_H5_PATH)
     parser.add_argument("--violence-onnx",       default=VIOLENCE_ONNX_PATH)
-    parser.add_argument("--litter-model",        default=LITTER_MODEL_PATH)
+    parser.add_argument("--litter-model",        default=LITTER_MODEL_PATH,
+                        help="Path to litter YOLOv8s ONNX model (default: yolov8s.onnx)")
     parser.add_argument("--fire-model",          default=FIRE_MODEL_PATH,
-                        help="Path to fire/smoke YOLOv8 model (default: bestfire.pt)")
+                        help="Path to fire/smoke YOLOv8 model (default: Fire_best.pt)")
     parser.add_argument("--no-fire",             action="store_true",
                         help="Disable fire/smoke detection entirely")
-    parser.add_argument("--fire-threshold",      type=float, default=FIRE_THRESHOLD,
-                        help="Confidence threshold for fire/smoke (default 0.40)")
+    parser.add_argument("--fire-threshold",      type=float, default=FIRE_THRESHOLD)
     parser.add_argument("--person-model",        default=PERSON_MODEL_PATH)
     parser.add_argument("--person-class-id",     type=int,   default=PERSON_CLASS_ID)
     parser.add_argument("--person-threshold",    type=float, default=PERSON_THRESHOLD)
