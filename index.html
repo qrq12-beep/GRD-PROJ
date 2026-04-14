@@ -1359,7 +1359,9 @@ body {
 
             <!-- Active state (hidden by default) -->
             <div class="feed-active-bg" id="feedActiveBg" style="display:none; width:100%; height:100%; position:absolute; inset:0;">
-              <img class="feed-stream-img" id="feedImg" src="" alt="stream">
+              <video id="video" autoplay muted playsinline style="width:100%; height:100%; object-fit:cover;"></video>
+              <img class="feed-stream-img" id="annotatedImg" src="" alt="annotated" style="display:none; width:100%; height:100%; position:absolute; top:0; left:0;">
+              <canvas id="canvas" style="display:none;"></canvas>
             </div>
 
             <!-- HUD -->
@@ -1757,6 +1759,12 @@ const S = {
   totalAlerts:    0,
   chartHistory:   [],
   modules: { violence: true, litter: true, fire: true, person: true },
+  ws: null,
+  video: null,
+  canvas: null,
+  ctx: null,
+  stream: null,
+  captureInterval: null,
 };
 
 // ══════════════════════════════════════════════════════════
@@ -2108,6 +2116,77 @@ function simulateTick() {
 }
 
 // ══════════════════════════════════════════════════════════
+// CAMERA & WEBSOCKET
+// ══════════════════════════════════════════════════════════
+async function startCamera() {
+  try {
+    S.video = document.getElementById('video');
+    S.canvas = document.getElementById('canvas');
+    S.ctx = S.canvas.getContext('2d');
+
+    S.stream = await navigator.mediaDevices.getUserMedia({ video: true });
+    S.video.srcObject = S.stream;
+    await S.video.play();
+
+    // Connect WebSocket
+    const wsUrl = `ws://localhost:5000`;
+    S.ws = new WebSocket(wsUrl);
+    S.ws.onopen = () => {
+      console.log('WebSocket connected');
+      // Start capturing frames
+      S.captureInterval = setInterval(captureAndSend, 100); // 10 fps
+    };
+    S.ws.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      handleResult(data);
+    };
+    S.ws.onerror = (error) => {
+      console.error('WebSocket error:', error);
+      setAlert('danger', 'Connection Error', 'Failed to connect to detection server', null);
+    };
+    S.ws.onclose = () => {
+      console.log('WebSocket closed');
+    };
+
+  } catch (error) {
+    console.error('Camera error:', error);
+    setAlert('danger', 'Camera Error', 'Unable to access camera: ' + error.message, null);
+  }
+}
+
+function captureAndSend() {
+  if (!S.running || !S.video || S.video.readyState < 2) return;
+
+  S.canvas.width = S.video.videoWidth;
+  S.canvas.height = S.video.videoHeight;
+  S.ctx.drawImage(S.video, 0, 0);
+
+  const frameData = S.canvas.toDataURL('image/jpeg', 0.8);
+  if (S.ws && S.ws.readyState === WebSocket.OPEN) {
+    S.ws.send(JSON.stringify({ frame: frameData }));
+  }
+}
+
+function handleResult(data) {
+  // Update detection state
+  S.frames++;
+
+  // Update UI with results
+  if (data.annotated_frame) {
+    const img = document.getElementById('annotatedImg');
+    img.src = data.annotated_frame;
+    img.style.display = 'block';
+    S.video.style.display = 'none';
+  }
+
+  // Update HUD
+  document.getElementById('hudTR').textContent = `${data.fps || 0} fps · frame ${S.frames}`;
+
+  // Update detection state (you can add more updates here)
+  // For example, update violence status, etc.
+}
+
+// ══════════════════════════════════════════════════════════
 // START / STOP
 // ══════════════════════════════════════════════════════════
 function startDetection() {
@@ -2121,22 +2200,18 @@ function startDetection() {
   document.getElementById('statusText').textContent = 'Live';
 
   const src = document.getElementById('sourceInput').value || '0';
-  document.getElementById('feedMetaText').textContent = `Source: ${src} · Resolution: 1280×720`;
-  document.getElementById('hudBR').textContent = `SRC: ${src} · ALL MODULES`;
+  document.getElementById('feedMetaText').textContent = `Source: Client Camera · Resolution: Auto`;
+  document.getElementById('hudBR').textContent = `SRC: Client · ALL MODULES`;
 
   // Show active feed area
   document.getElementById('feedPlaceholder').style.display = 'none';
   document.getElementById('feedActiveBg').style.display = '';
 
-  // Try to connect to MJPEG stream
-  const apiUrl = document.getElementById('apiUrlInput')?.value || 'http://localhost:8000';
-  const img = document.getElementById('feedImg');
-  img.style.display = 'block';
-  img.src = `${apiUrl}/stream`;
-  img.onerror = () => { img.style.display = 'none'; };
+  // Start camera and WebSocket
+  startCamera();
 
   setAlert('safe', 'Detection Active', 'All modules armed and monitoring', null);
-  cliLog('cmd', `start --source ${src} --mode all`);
+  cliLog('cmd', `start --source client --mode all`);
   cliLog('info', 'Models loaded. AEGIS armed and active.');
   cliLog('out', `Violence threshold: ${document.getElementById('vThreshSlider').value}% | Litter: ${document.getElementById('lThreshSlider').value}% | Fire: ${document.getElementById('fThreshSlider').value}%`);
 
@@ -2147,11 +2222,28 @@ function stopDetection() {
   if (!S.running) return;
   S.running = false;
   clearInterval(S.simInterval);
+  clearInterval(S.captureInterval);
+
+  // Stop camera
+  if (S.stream) {
+    S.stream.getTracks().forEach(track => track.stop());
+    S.stream = null;
+  }
+  if (S.video) {
+    S.video.srcObject = null;
+  }
+
+  // Close WebSocket
+  if (S.ws) {
+    S.ws.close();
+    S.ws = null;
+  }
 
   document.getElementById('statusBadge').className = 'status-badge';
   document.getElementById('statusText').textContent = 'Offline';
-  document.getElementById('feedImg').src = '';
-  document.getElementById('feedImg').style.display = 'none';
+  document.getElementById('annotatedImg').src = '';
+  document.getElementById('annotatedImg').style.display = 'none';
+  document.getElementById('video').style.display = 'none';
   document.getElementById('feedActiveBg').style.display = 'none';
   document.getElementById('feedPlaceholder').style.display = '';
   setAlert('safe', 'Detection Stopped', 'Session ended by operator', null);

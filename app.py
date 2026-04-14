@@ -174,6 +174,10 @@ def load_violence_model(h5_path: str, onnx_path: str):
 def _export_litter_onnx(onnx_path: str):
     """Export yolov8s.pt to onnx_path. Called when the file is missing or corrupt."""
     print(f"[INFO] Exporting yolov8s.pt -> {onnx_path}  (one-time, may take a minute) ...")
+    # Patch cv2 for headless
+    import cv2
+    if not hasattr(cv2, 'imshow'):
+        cv2.imshow = lambda *args, **kwargs: None
     try:
         from ultralytics import YOLO
     except ImportError:
