@@ -1186,8 +1186,10 @@
             <div class="feed-placeholder-text">Awaiting stream connection</div>
             <div class="feed-crosshair"></div>
           </div>
-          <!-- Real MJPEG feed — shown after startDetection() -->
-          <img id="liveFeedImg" src="" alt="Live feed" />
+          <!-- Real feed — shown after startDetection() -->
+          <video id="video" autoplay muted playsinline style="width:100%; height:100%; object-fit:cover; display:none;"></video>
+          <img id="annotatedImg" src="" alt="Annotated feed" style="width:100%; height:100%; display:none;" />
+          <canvas id="canvas" style="display:none;"></canvas>
           <!-- Overlay corners always on top -->
           <div class="feed-overlay-corner tl" id="overlayTL">SENTINEL · LIVE</div>
           <div class="feed-overlay-corner tr" id="overlayTR"></div>
@@ -1530,6 +1532,13 @@ const state = {
   _prevLitter: false,
   _prevFire: false,
   _prevSmoke: false,
+  // Camera and WS
+  ws: null,
+  video: null,
+  canvas: null,
+  ctx: null,
+  stream: null,
+  captureInterval: null,
 };
 
 // ── Clock ──
@@ -1849,21 +1858,121 @@ async function fetchState() {
   }
 }
 
+// ── Camera & WebSocket ───────────────────────────────────────────────────────
+async function startCamera() {
+  try {
+    state.video = document.getElementById('video');
+    state.canvas = document.getElementById('canvas');
+    state.ctx = state.canvas.getContext('2d');
+
+    state.stream = await navigator.mediaDevices.getUserMedia({ video: true });
+    state.video.srcObject = state.stream;
+    await state.video.play();
+
+    // Show video
+    document.getElementById('feedPlaceholder').style.display = 'none';
+    state.video.style.display = 'block';
+
+    // Connect WebSocket
+    const wsUrl = `ws://localhost:5000`;
+    state.ws = new WebSocket(wsUrl);
+    state.ws.onopen = () => {
+      console.log('WebSocket connected');
+      // Start capturing frames
+      state.captureInterval = setInterval(captureAndSend, 100); // 10 fps
+    };
+    state.ws.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      handleResult(data);
+    };
+    state.ws.onerror = (error) => {
+      console.error('WebSocket error:', error);
+      setAlert('danger', 'Connection Error', 'Failed to connect to detection server', '');
+    };
+    state.ws.onclose = () => {
+      console.log('WebSocket closed');
+    };
+
+  } catch (error) {
+    console.error('Camera error:', error);
+    setAlert('danger', 'Camera Error', 'Unable to access camera: ' + error.message, '');
+  }
+}
+
+function captureAndSend() {
+  if (!state.running || !state.video || state.video.readyState < 2) return;
+
+  state.canvas.width = state.video.videoWidth;
+  state.canvas.height = state.video.videoHeight;
+  state.ctx.drawImage(state.video, 0, 0);
+
+  const frameData = state.canvas.toDataURL('image/jpeg', 0.8);
+  if (state.ws && state.ws.readyState === WebSocket.OPEN) {
+    state.ws.send(JSON.stringify({ frame: frameData }));
+  }
+}
+
+function handleResult(data) {
+  state.frames++;
+
+  // Update annotated image
+  if (data.annotated_frame) {
+    const img = document.getElementById('annotatedImg');
+    img.src = data.annotated_frame;
+    img.style.display = 'block';
+    state.video.style.display = 'none';
+  }
+
+  // Update UI with detection data
+  document.getElementById('fpsEl').textContent = `${data.fps || 0} fps`;
+  document.getElementById('overlayTR').textContent = `${data.fps || 0} fps · frame ${state.frames}`;
+
+  // Violence
+  const vConf = data.violence_confidence || 0;
+  document.getElementById('violenceConf').textContent = `${Math.round(vConf * 100)}%`;
+  document.getElementById('violenceBar').style.width = `${vConf * 100}%`;
+  if (data.is_violent && !state._prevViolent) {
+    state.violenceAlerts++;
+    addEvent('violence', `Violence detected (${Math.round(vConf * 100)}% confidence)`, vConf);
+  }
+  state._prevViolent = data.is_violent;
+
+  // Litter
+  const litterCount = data.litter_detections ? data.litter_detections.length : 0;
+  document.getElementById('litterCount').textContent = litterCount;
+  document.getElementById('litterBar').style.width = `${Math.min(litterCount * 10, 100)}%`;
+  if (data.is_littering && !state._prevLitter) {
+    state.litterAlerts++;
+    addEvent('litter', `Littering detected (${litterCount} objects)`, 0.8);
+  }
+  state._prevLitter = data.is_littering;
+
+  // Fire/Smoke
+  if (data.is_fire && !state._prevFire) {
+    state.fireAlerts++;
+    addEvent('fire', 'Fire detected', 0.9);
+  }
+  state._prevFire = data.is_fire;
+  if (data.is_smoke && !state._prevSmoke) {
+    state.smokeAlerts++;
+    addEvent('smoke', 'Smoke detected', 0.7);
+  }
+  state._prevSmoke = data.is_smoke;
+
+  // Person count
+  document.getElementById('personCount').textContent = data.person_count || 0;
+}
+
 // ── Start / Stop ──────────────────────────────────────────────────────────────
 function startDetection() {
   if (state.running) return;
   state.running     = true;
   state.sessionStart = Date.now();
 
-  // Show the real MJPEG feed, hide placeholder
-  const ph  = document.getElementById('feedPlaceholder');
-  const img = document.getElementById('liveFeedImg');
-  ph.style.display  = 'none';
-  img.src           = '/video_feed';
-  img.style.display = 'block';
+  // Start camera and WebSocket
+  startCamera();
 
-  document.getElementById('feedMeta').textContent =
-    `Source: ${document.getElementById('sourceInput').value || '0'}`;
+  document.getElementById('feedMeta').textContent = 'Source: Client Camera';
   document.getElementById('sessionTimeEl').textContent = 'Session active';
 
   const pill = document.getElementById('statusPill');
@@ -1874,20 +1983,33 @@ function startDetection() {
 
   setAlert('safe', 'Detection active — monitoring all modules.', '');
 
-  // Poll /api/state every 800 ms for live metrics
-  state.pollInterval = setInterval(fetchState, 800);
   refreshCLI();
 }
 
 function stopDetection() {
   if (!state.running) return;
   state.running = false;
-  clearInterval(state.pollInterval);
-  state.pollInterval = null;
+  clearInterval(state.captureInterval);
 
-  // Stop MJPEG stream — clear src so browser closes the connection
-  const img = document.getElementById('liveFeedImg');
-  img.src           = '';
+  // Stop camera
+  if (state.stream) {
+    state.stream.getTracks().forEach(track => track.stop());
+    state.stream = null;
+  }
+  if (state.video) {
+    state.video.srcObject = null;
+    state.video.style.display = 'none';
+  }
+
+  // Close WebSocket
+  if (state.ws) {
+    state.ws.close();
+    state.ws = null;
+  }
+
+  // Hide annotated img
+  const img = document.getElementById('annotatedImg');
+  img.src = '';
   img.style.display = 'none';
 
   // Restore placeholder
