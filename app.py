@@ -51,9 +51,15 @@ LITTER_CLASS_NAMES  = {0: "litter"}    # e.g. {0:"bottle", 1:"bag", 2:"wrapper"}
 IMG_SIZE            = (128, 128)
 SEQUENCE_LEN        = 1
 VIOLENCE_CLASS      = 1
-VIOLENCE_THRESHOLD  = 0.80
-LITTER_THRESHOLD    = 0.40
-FIRE_THRESHOLD      = 0.40
+VIOLENCE_THRESHOLD  = 0.88   # raised: reduces false positives
+LITTER_THRESHOLD    = 0.55   # raised: only high-confidence litter detections
+FIRE_THRESHOLD      = 0.55   # raised: reduces false fire/smoke alarms
+
+# Temporal smoothing: how many consecutive positive frames needed before alert
+# Set to 1 to disable (original behaviour). Higher = less sensitive.
+VIOLENCE_CONSEC     = 3      # require 3 frames in a row to trigger violence
+LITTER_CONSEC       = 2      # require 2 frames in a row to trigger litter
+FIRE_CONSEC         = 2      # require 2 frames in a row to trigger fire
 YOLO_IMGSZ          = 320
 
 # Person counter
@@ -62,6 +68,11 @@ PERSON_THRESHOLD    = 0.40
 PERSON_MODEL_PATH   = ""
 
 ENABLE_FIRE         = True
+
+# Temporal smoothing counters (do not edit here -- controlled by VIOLENCE_CONSEC etc.)
+_v_consec_count     = 0
+_l_consec_count     = 0
+_f_consec_count     = 0
 
 SAVE_VIDEO          = True
 LOG_FILE            = "detections.log"
@@ -557,8 +568,34 @@ class InferenceWorker(threading.Thread):
         self.in_q      = in_q
         self.out_q     = out_q
         self.log_f     = log_f
-        self.frame_buf = deque(maxlen=max(SEQUENCE_LEN, 1))
-        self.running   = True
+        self.frame_buf   = deque(maxlen=max(SEQUENCE_LEN, 1))
+        self.running     = True
+        # Temporal smoothing counters
+        self._v_streak   = 0
+        self._l_streak   = 0
+        self._f_streak   = 0
+        self._v_active   = False   # latched: True while we're in an active alert
+        self._l_active   = False
+        self._f_active   = False
+
+    def _smooth(self, raw_flag: bool, streak_attr: str, active_attr: str, consec: int):
+        """
+        Returns (smoothed_flag, updated_streak, updated_active).
+        Alert fires only after `consec` consecutive positive frames.
+        Alert clears immediately on the first negative frame.
+        """
+        streak = getattr(self, streak_attr)
+        active = getattr(self, active_attr)
+        if raw_flag:
+            streak += 1
+        else:
+            streak  = 0
+            active  = False
+        if streak >= consec:
+            active = True
+        setattr(self, streak_attr, streak)
+        setattr(self, active_attr, active)
+        return active
 
     def run(self):
         run_v = MODE in ("both", "violence")
@@ -605,6 +642,19 @@ class InferenceWorker(threading.Thread):
             is_littering, litter_d    = l_res
             is_fire, is_smoke, fire_d = f_res
             person_count, person_d    = p_res
+
+            # ── Temporal smoothing ─────────────────────────────────────────
+            is_violent   = self._smooth(is_violent,
+                               '_v_streak', '_v_active', VIOLENCE_CONSEC)
+            is_littering = self._smooth(is_littering,
+                               '_l_streak', '_l_active', LITTER_CONSEC)
+            _fire_raw    = is_fire or is_smoke
+            _fire_smooth = self._smooth(_fire_raw,
+                               '_f_streak', '_f_active', FIRE_CONSEC)
+            if not _fire_smooth:
+                is_fire = is_smoke = False
+                fire_d  = []
+            # ──────────────────────────────────────────────────────────────
 
             ts = datetime.now().strftime("%H:%M:%S.%f")[:-3]
             if run_v and is_violent:
@@ -801,7 +851,7 @@ def run(source):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Violence + Littering + Fire/Smoke Detection -- Optimized")
-    parser.add_argument("--source",              default="1")
+    parser.add_argument("--source",              default="0")
     parser.add_argument("--mode",                default="both",
                         choices=["both", "violence", "litter"])
     parser.add_argument("--violence-model",      default=VIOLENCE_H5_PATH)
