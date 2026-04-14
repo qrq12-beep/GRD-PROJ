@@ -51,20 +51,20 @@ LITTER_CLASS_NAMES  = {0: "litter"}    # e.g. {0:"bottle", 1:"bag", 2:"wrapper"}
 IMG_SIZE            = (128, 128)
 SEQUENCE_LEN        = 1
 VIOLENCE_CLASS      = 1
-VIOLENCE_THRESHOLD  = 0.88   # raised: reduces false positives
-LITTER_THRESHOLD    = 0.55   # raised: only high-confidence litter detections
-FIRE_THRESHOLD      = 0.55   # raised: reduces false fire/smoke alarms
+VIOLENCE_THRESHOLD  = 0.75   # balanced: good sensitivity with low false positives
+LITTER_THRESHOLD    = 0.45   # balanced: catches more litter with acceptable false rate
+FIRE_THRESHOLD      = 0.50   # balanced: catches early fire/smoke signatures
 
 # Temporal smoothing: how many consecutive positive frames needed before alert
 # Set to 1 to disable (original behaviour). Higher = less sensitive.
-VIOLENCE_CONSEC     = 3      # require 3 frames in a row to trigger violence
+VIOLENCE_CONSEC     = 2      # require 2 frames in a row (faster response, still stable)
 LITTER_CONSEC       = 2      # require 2 frames in a row to trigger litter
-FIRE_CONSEC         = 2      # require 2 frames in a row to trigger fire
+FIRE_CONSEC         = 1      # fire/smoke: alert on first detection (safety critical)
 YOLO_IMGSZ          = 320
 
 # Person counter
 PERSON_CLASS_ID     = 0
-PERSON_THRESHOLD    = 0.40
+PERSON_THRESHOLD    = 0.35   # slightly lower for better person detection
 PERSON_MODEL_PATH   = ""
 
 ENABLE_FIRE         = True
@@ -76,7 +76,7 @@ _f_consec_count     = 0
 
 SAVE_VIDEO          = True
 LOG_FILE            = "detections.log"
-MOTION_THRESHOLD    = 10
+MOTION_THRESHOLD    = 6      # more sensitive to subtle motion
 MAX_QUEUE_DEPTH     = 2
 FPS_CAP             = 30
 
