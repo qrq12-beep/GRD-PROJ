@@ -21,9 +21,14 @@ app_module = importlib.import_module("app")
 
 import os as _os
 
-# ── Flask setup — serve HTML files from the same directory as server.py ──
+# ── Flask setup — serve HTML files and static assets from the project root ──
 _here      = _os.path.dirname(_os.path.abspath(__file__))
-flask_app  = Flask(__name__, template_folder=_here, static_folder=_here)
+flask_app  = Flask(
+    __name__,
+    template_folder=_here,
+    static_folder=_here,
+    static_url_path="",
+)
 
 # Allow index.html to be served without a templates/ subfolder
 flask_app.jinja_env.auto_reload = True

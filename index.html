@@ -1,2036 +1,253 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Sentinel — Intelligent Surveillance</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@300;400;500&family=Instrument+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
-<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
-<style>
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-  :root {
-    --ink:        #0e0f11;
-    --ink-mid:    #1c1e23;
-    --ink-soft:   #2c2f38;
-    --mist:       #e8e9eb;
-    --mist-soft:  #f4f4f5;
-    --mist-pale:  #fafafb;
-    --stone:      #9ea3ad;
-    --stone-dark: #6b7180;
-    --accent:     #c8a96e;       /* warm gold — single accent */
-    --accent-dim: #c8a96e30;
-    --danger:     #c44a3a;
-    --danger-dim: #c44a3a18;
-    --warn:       #c8813a;
-    --warn-dim:   #c8813a18;
-    --safe:       #3a7c5c;
-    --safe-dim:   #3a7c5c15;
-    --smoke-c:    #6e6b7c;
-    --smoke-dim:  #6e6b7c18;
-
-    --r-sm: 4px;
-    --r-md: 8px;
-    --r-lg: 14px;
-    --r-xl: 22px;
-
-    --font-display: 'DM Serif Display', Georgia, serif;
-    --font-body:    'Instrument Sans', sans-serif;
-    --font-mono:    'DM Mono', monospace;
-
-    --transition: 240ms cubic-bezier(0.4,0,0.2,1);
-    --shadow-xs: 0 1px 3px rgba(14,15,17,0.06), 0 1px 2px rgba(14,15,17,0.04);
-    --shadow-sm: 0 4px 12px rgba(14,15,17,0.08), 0 2px 4px rgba(14,15,17,0.05);
-    --shadow-md: 0 12px 32px rgba(14,15,17,0.10), 0 4px 8px rgba(14,15,17,0.06);
-  }
-
-  html { scroll-behavior: smooth; }
-
-  body {
-    font-family: var(--font-body);
-    background: var(--mist-pale);
-    color: var(--ink);
-    min-height: 100vh;
-    font-size: 15px;
-    line-height: 1.6;
-    -webkit-font-smoothing: antialiased;
-  }
-
-  /* ── Layout Shell ── */
-  .shell {
-    display: grid;
-    grid-template-columns: 240px 1fr;
-    grid-template-rows: auto 1fr;
-    min-height: 100vh;
-  }
-
-  /* ── Top Bar ── */
-  .topbar {
-    grid-column: 1 / -1;
-    background: var(--ink);
-    color: var(--mist);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 0 32px;
-    height: 60px;
-    position: sticky;
-    top: 0;
-    z-index: 100;
-    border-bottom: 1px solid var(--ink-soft);
-  }
-
-  .topbar-brand {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }
-
-  .topbar-brand-icon {
-    width: 30px; height: 30px;
-    background: var(--accent);
-    border-radius: var(--r-sm);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-  }
-
-  .topbar-brand-icon svg { color: var(--ink); }
-
-  .brand-name {
-    font-family: var(--font-display);
-    font-size: 1.2rem;
-    letter-spacing: 0.02em;
-    color: #fff;
-  }
-
-  .brand-tagline {
-    font-size: 0.7rem;
-    font-family: var(--font-mono);
-    color: var(--stone);
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    margin-left: 4px;
-    align-self: flex-end;
-    margin-bottom: 2px;
-  }
-
-  .topbar-right {
-    display: flex;
-    align-items: center;
-    gap: 20px;
-  }
-
-  .status-pill {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-family: var(--font-mono);
-    font-size: 0.72rem;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
-    color: var(--stone);
-    padding: 5px 12px;
-    border: 1px solid var(--ink-soft);
-    border-radius: 100px;
-    transition: var(--transition);
-  }
-
-  .status-pill.live { color: var(--safe); border-color: var(--safe); }
-  .status-pill.offline { color: var(--stone); }
-
-  .pulse-dot {
-    width: 6px; height: 6px;
-    border-radius: 50%;
-    background: var(--safe);
-    animation: pulse 2s ease-in-out infinite;
-  }
-
-  @keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.35; }
-  }
-
-  .topbar-time {
-    font-family: var(--font-mono);
-    font-size: 0.72rem;
-    color: var(--stone-dark);
-    letter-spacing: 0.05em;
-  }
-
-  /* ── Sidebar ── */
-  .sidebar {
-    background: var(--ink-mid);
-    border-right: 1px solid var(--ink-soft);
-    padding: 28px 0;
-    display: flex;
-    flex-direction: column;
-    gap: 0;
-    position: sticky;
-    top: 60px;
-    height: calc(100vh - 60px);
-    overflow-y: auto;
-  }
-
-  .sidebar-section {
-    padding: 0 20px 20px;
-    border-bottom: 1px solid var(--ink-soft);
-    margin-bottom: 20px;
-  }
-
-  .sidebar-section:last-child { border-bottom: none; margin-bottom: 0; }
-
-  .sidebar-label {
-    font-family: var(--font-mono);
-    font-size: 0.62rem;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: var(--stone-dark);
-    margin-bottom: 12px;
-    padding-left: 4px;
-  }
-
-  .nav-item {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 9px 12px;
-    border-radius: var(--r-md);
-    cursor: pointer;
-    transition: var(--transition);
-    color: var(--stone);
-    font-size: 0.85rem;
-    font-weight: 400;
-    border: 1px solid transparent;
-    text-decoration: none;
-    margin-bottom: 2px;
-  }
-
-  .nav-item svg { flex-shrink: 0; }
-
-  .nav-item:hover { background: var(--ink-soft); color: var(--mist); }
-
-  .nav-item.active {
-    background: var(--accent-dim);
-    color: var(--accent);
-    border-color: rgba(200,169,110,0.2);
-  }
-
-  .module-toggle {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 9px 12px;
-    border-radius: var(--r-md);
-    cursor: pointer;
-    transition: var(--transition);
-    margin-bottom: 6px;
-  }
-
-  .module-toggle:hover { background: var(--ink-soft); }
-
-  .module-toggle-left {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    font-size: 0.85rem;
-    color: var(--mist);
-  }
-
-  .toggle-switch {
-    width: 32px; height: 18px;
-    background: var(--ink-soft);
-    border-radius: 100px;
-    position: relative;
-    transition: var(--transition);
-    flex-shrink: 0;
-    cursor: pointer;
-  }
-
-  .toggle-switch.on { background: var(--accent); }
-
-  .toggle-switch::after {
-    content: '';
-    position: absolute;
-    width: 12px; height: 12px;
-    background: #fff;
-    border-radius: 50%;
-    top: 3px; left: 3px;
-    transition: var(--transition);
-    box-shadow: 0 1px 3px rgba(0,0,0,0.3);
-  }
-
-  .toggle-switch.on::after { left: 17px; }
-
-  /* ── Main Content ── */
-  .main {
-    padding: 32px;
-    display: flex;
-    flex-direction: column;
-    gap: 28px;
-    min-width: 0;
-  }
-
-  /* ── Section Headers ── */
-  .section-header {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    margin-bottom: 16px;
-  }
-
-  .section-title {
-    font-family: var(--font-display);
-    font-size: 1.3rem;
-    color: var(--ink);
-    font-weight: 400;
-  }
-
-  .section-meta {
-    font-family: var(--font-mono);
-    font-size: 0.68rem;
-    color: var(--stone);
-    letter-spacing: 0.05em;
-  }
-
-  /* ── Feed Area ── */
-  .feed-container {
-    background: var(--ink);
-    border-radius: var(--r-xl);
-    overflow: hidden;
-    aspect-ratio: 16/9;
-    position: relative;
-    box-shadow: var(--shadow-md);
-    border: 1px solid var(--ink-soft);
-    max-height: 520px;
-  }
-
-  .feed-placeholder {
-    width: 100%;
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 14px;
-    color: var(--stone-dark);
-    position: relative;
-  }
-
-  .feed-placeholder::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background:
-      radial-gradient(ellipse at 20% 80%, rgba(200,169,110,0.03) 0%, transparent 50%),
-      radial-gradient(ellipse at 80% 20%, rgba(60,124,92,0.03) 0%, transparent 50%);
-  }
-
-  .feed-placeholder-icon { color: var(--stone-dark); opacity: 0.4; }
-
-  .feed-placeholder-text {
-    font-family: var(--font-mono);
-    font-size: 0.75rem;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    opacity: 0.5;
-  }
-
-  .feed-overlay-corner {
-    position: absolute;
-    font-family: var(--font-mono);
-    font-size: 0.65rem;
-    letter-spacing: 0.05em;
-    color: rgba(255,255,255,0.35);
-    padding: 12px 16px;
-    pointer-events: none;
-  }
-
-  .feed-overlay-corner.tl { top: 0; left: 0; }
-  .feed-overlay-corner.tr { top: 0; right: 0; text-align: right; }
-  .feed-overlay-corner.bl { bottom: 0; left: 0; }
-  .feed-overlay-corner.br { bottom: 0; right: 0; }
-
-  .feed-crosshair {
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    opacity: 0.06;
-    background:
-      linear-gradient(to right, transparent calc(50% - 0.5px), rgba(255,255,255,0.6) calc(50%), transparent calc(50% + 0.5px)),
-      linear-gradient(to bottom, transparent calc(50% - 0.5px), rgba(255,255,255,0.6) calc(50%), transparent calc(50% + 0.5px));
-  }
-
-  /* ── Alert Banner ── */
-  .alert-banner {
-    border-radius: var(--r-lg);
-    padding: 16px 22px;
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    border: 1px solid;
-    transition: var(--transition);
-    position: relative;
-    overflow: hidden;
-  }
-
-  .alert-banner::before {
-    content: '';
-    position: absolute;
-    left: 0; top: 0; bottom: 0;
-    width: 3px;
-    border-radius: 0;
-  }
-
-  .alert-banner.safe {
-    background: var(--safe-dim);
-    border-color: rgba(58,124,92,0.2);
-    color: var(--safe);
-  }
-  .alert-banner.safe::before { background: var(--safe); }
-
-  .alert-banner.danger {
-    background: var(--danger-dim);
-    border-color: rgba(196,74,58,0.25);
-    color: var(--danger);
-  }
-  .alert-banner.danger::before { background: var(--danger); }
-
-  .alert-banner.warn {
-    background: var(--warn-dim);
-    border-color: rgba(200,129,58,0.25);
-    color: var(--warn);
-  }
-  .alert-banner.warn::before { background: var(--warn); }
-
-  .alert-banner.smoke {
-    background: var(--smoke-dim);
-    border-color: rgba(110,107,124,0.25);
-    color: var(--smoke-c);
-  }
-  .alert-banner.smoke::before { background: var(--smoke-c); }
-
-  .alert-banner-label {
-    font-family: var(--font-mono);
-    font-size: 0.7rem;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    opacity: 0.7;
-  }
-
-  .alert-banner-text {
-    font-weight: 500;
-    font-size: 0.9rem;
-    flex: 1;
-  }
-
-  .alert-banner-conf {
-    font-family: var(--font-mono);
-    font-size: 0.75rem;
-    opacity: 0.6;
-    margin-left: auto;
-    flex-shrink: 0;
-  }
-
-  /* ── Detection Cards Grid ── */
-  .cards-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 16px;
-  }
-
-  .det-card {
-    background: #fff;
-    border: 1px solid var(--mist);
-    border-radius: var(--r-lg);
-    padding: 20px;
-    box-shadow: var(--shadow-xs);
-    transition: var(--transition);
-    position: relative;
-    overflow: hidden;
-  }
-
-  .det-card::after {
-    content: '';
-    position: absolute;
-    bottom: 0; left: 0; right: 0;
-    height: 2px;
-    background: var(--mist);
-    transition: var(--transition);
-  }
-
-  .det-card.active-danger::after { background: var(--danger); }
-  .det-card.active-warn::after { background: var(--warn); }
-  .det-card.active-smoke::after { background: var(--smoke-c); }
-  .det-card.active-safe::after { background: var(--safe); }
-
-  .det-card:hover { box-shadow: var(--shadow-sm); transform: translateY(-1px); }
-
-  .det-card-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 14px;
-  }
-
-  .det-card-icon-wrap {
-    width: 36px; height: 36px;
-    border-radius: var(--r-md);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-
-  .det-card-icon-wrap.violence { background: var(--danger-dim); color: var(--danger); }
-  .det-card-icon-wrap.litter   { background: var(--warn-dim);   color: var(--warn); }
-  .det-card-icon-wrap.fire     { background: #c44a3a15;         color: var(--danger); }
-  .det-card-icon-wrap.smoke    { background: var(--smoke-dim);  color: var(--smoke-c); }
-  .det-card-icon-wrap.person   { background: var(--accent-dim); color: var(--accent); }
-
-  .det-card-badge {
-    font-family: var(--font-mono);
-    font-size: 0.62rem;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    padding: 3px 8px;
-    border-radius: 100px;
-    border: 1px solid var(--mist);
-    color: var(--stone);
-    background: var(--mist-pale);
-  }
-
-  .det-card-badge.on { color: var(--safe); border-color: rgba(58,124,92,0.3); background: var(--safe-dim); }
-  .det-card-badge.alert { color: var(--danger); border-color: rgba(196,74,58,0.3); background: var(--danger-dim); }
-  .det-card-badge.off { color: var(--stone-dark); opacity: 0.6; }
-
-  .det-card-name {
-    font-size: 0.78rem;
-    font-weight: 500;
-    color: var(--stone-dark);
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    font-family: var(--font-mono);
-    margin-bottom: 4px;
-  }
-
-  .det-card-value {
-    font-family: var(--font-display);
-    font-size: 2rem;
-    color: var(--ink);
-    line-height: 1;
-    margin-bottom: 10px;
-  }
-
-  .det-card-value small {
-    font-family: var(--font-mono);
-    font-size: 0.8rem;
-    color: var(--stone);
-    font-style: normal;
-    margin-left: 2px;
-  }
-
-  /* Confidence bar */
-  .conf-bar-track {
-    height: 3px;
-    background: var(--mist);
-    border-radius: 100px;
-    overflow: hidden;
-    margin-top: 2px;
-  }
-
-  .conf-bar-fill {
-    height: 100%;
-    border-radius: 100px;
-    background: var(--stone);
-    transition: width 0.4s cubic-bezier(0.4,0,0.2,1);
-  }
-
-  .conf-bar-fill.danger { background: var(--danger); }
-  .conf-bar-fill.warn   { background: var(--warn); }
-  .conf-bar-fill.safe   { background: var(--safe); }
-  .conf-bar-fill.accent { background: var(--accent); }
-  .conf-bar-fill.smoke  { background: var(--smoke-c); }
-
-  /* ── Stats Row ── */
-  .stats-grid {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 14px;
-  }
-
-  .stat-tile {
-    background: #fff;
-    border: 1px solid var(--mist);
-    border-radius: var(--r-lg);
-    padding: 18px 20px;
-    box-shadow: var(--shadow-xs);
-  }
-
-  .stat-tile-label {
-    font-family: var(--font-mono);
-    font-size: 0.63rem;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: var(--stone);
-    margin-bottom: 8px;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-  }
-
-  .stat-tile-value {
-    font-family: var(--font-display);
-    font-size: 1.8rem;
-    line-height: 1;
-    color: var(--ink);
-  }
-
-  .stat-tile-delta {
-    font-family: var(--font-mono);
-    font-size: 0.68rem;
-    color: var(--stone);
-    margin-top: 4px;
-  }
-
-  /* ── Log Table ── */
-  .log-panel {
-    background: #fff;
-    border: 1px solid var(--mist);
-    border-radius: var(--r-xl);
-    overflow: hidden;
-    box-shadow: var(--shadow-xs);
-  }
-
-  .log-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 18px 22px;
-    border-bottom: 1px solid var(--mist);
-  }
-
-  .log-header-title {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-weight: 500;
-    font-size: 0.9rem;
-    color: var(--ink);
-  }
-
-  .log-filter-row {
-    display: flex;
-    gap: 8px;
-  }
-
-  .filter-chip {
-    font-family: var(--font-mono);
-    font-size: 0.65rem;
-    letter-spacing: 0.07em;
-    text-transform: uppercase;
-    padding: 4px 10px;
-    border-radius: 100px;
-    border: 1px solid var(--mist);
-    cursor: pointer;
-    transition: var(--transition);
-    color: var(--stone);
-    background: transparent;
-    user-select: none;
-  }
-
-  .filter-chip:hover { background: var(--mist-soft); color: var(--ink); }
-  .filter-chip.selected { background: var(--ink); color: #fff; border-color: var(--ink); }
-
-  .log-body { max-height: 280px; overflow-y: auto; }
-
-  .log-body::-webkit-scrollbar { width: 4px; }
-  .log-body::-webkit-scrollbar-track { background: transparent; }
-  .log-body::-webkit-scrollbar-thumb { background: var(--mist); border-radius: 2px; }
-
-  .log-row {
-    display: grid;
-    grid-template-columns: 90px 100px 1fr 80px;
-    align-items: center;
-    padding: 11px 22px;
-    border-bottom: 1px solid var(--mist-soft);
-    font-size: 0.82rem;
-    transition: var(--transition);
-    gap: 12px;
-  }
-
-  .log-row:last-child { border-bottom: none; }
-  .log-row:hover { background: var(--mist-pale); }
-
-  .log-row-time {
-    font-family: var(--font-mono);
-    font-size: 0.7rem;
-    color: var(--stone);
-    letter-spacing: 0.03em;
-  }
-
-  .log-type-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    font-family: var(--font-mono);
-    font-size: 0.63rem;
-    letter-spacing: 0.07em;
-    text-transform: uppercase;
-    padding: 3px 8px;
-    border-radius: 100px;
-  }
-
-  .log-type-badge.violence { background: var(--danger-dim); color: var(--danger); }
-  .log-type-badge.litter   { background: var(--warn-dim);   color: var(--warn); }
-  .log-type-badge.fire     { background: var(--danger-dim); color: var(--danger); }
-  .log-type-badge.smoke    { background: var(--smoke-dim);  color: var(--smoke-c); }
-
-  .log-row-msg { color: var(--ink); }
-
-  .log-row-conf {
-    text-align: right;
-    font-family: var(--font-mono);
-    font-size: 0.72rem;
-    color: var(--stone);
-  }
-
-  .log-empty {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 48px 20px;
-    color: var(--stone);
-    gap: 10px;
-  }
-
-  .log-empty-text {
-    font-family: var(--font-mono);
-    font-size: 0.72rem;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    opacity: 0.6;
-  }
-
-  /* ── Settings Panel ── */
-  .settings-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 14px;
-  }
-
-  .settings-card {
-    background: #fff;
-    border: 1px solid var(--mist);
-    border-radius: var(--r-lg);
-    padding: 20px;
-    box-shadow: var(--shadow-xs);
-  }
-
-  .settings-card-title {
-    font-size: 0.78rem;
-    font-weight: 600;
-    color: var(--ink);
-    margin-bottom: 14px;
-    display: flex;
-    align-items: center;
-    gap: 7px;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    font-family: var(--font-mono);
-  }
-
-  .setting-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 9px 0;
-    border-bottom: 1px solid var(--mist-soft);
-    gap: 12px;
-  }
-
-  .setting-row:last-child { border-bottom: none; }
-
-  .setting-label {
-    font-size: 0.82rem;
-    color: var(--ink);
-    display: flex;
-    align-items: center;
-    gap: 7px;
-  }
-
-  .setting-label span { color: var(--stone); font-size: 0.75rem; }
-
-  .setting-value {
-    font-family: var(--font-mono);
-    font-size: 0.78rem;
-    color: var(--stone-dark);
-    background: var(--mist-soft);
-    padding: 4px 10px;
-    border-radius: var(--r-sm);
-    border: 1px solid var(--mist);
-  }
-
-  /* ── Threshold Slider ── */
-  .slider-wrap {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    flex: 1;
-    justify-content: flex-end;
-  }
-
-  .threshold-slider {
-    -webkit-appearance: none;
-    width: 100px;
-    height: 3px;
-    border-radius: 2px;
-    background: var(--mist);
-    outline: none;
-    cursor: pointer;
-  }
-
-  .threshold-slider::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    width: 14px; height: 14px;
-    border-radius: 50%;
-    background: var(--accent);
-    border: 2px solid #fff;
-    box-shadow: 0 1px 4px rgba(0,0,0,0.2);
-    cursor: pointer;
-    transition: transform 0.15s;
-  }
-
-  .threshold-slider::-webkit-slider-thumb:hover { transform: scale(1.2); }
-
-  .slider-val {
-    font-family: var(--font-mono);
-    font-size: 0.72rem;
-    color: var(--ink);
-    min-width: 36px;
-    text-align: right;
-  }
-
-  /* ── Source Bar ── */
-  .source-bar {
-    background: #fff;
-    border: 1px solid var(--mist);
-    border-radius: var(--r-lg);
-    padding: 14px 20px;
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    box-shadow: var(--shadow-xs);
-    flex-wrap: wrap;
-  }
-
-  .source-bar-label {
-    font-family: var(--font-mono);
-    font-size: 0.68rem;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--stone);
-    flex-shrink: 0;
-  }
-
-  .source-input {
-    flex: 1;
-    min-width: 120px;
-    background: var(--mist-soft);
-    border: 1px solid var(--mist);
-    border-radius: var(--r-sm);
-    padding: 7px 12px;
-    font-family: var(--font-mono);
-    font-size: 0.8rem;
-    color: var(--ink);
-    outline: none;
-    transition: var(--transition);
-  }
-
-  .source-input:focus {
-    border-color: var(--accent);
-    background: #fff;
-    box-shadow: 0 0 0 3px var(--accent-dim);
-  }
-
-  .btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 7px;
-    padding: 8px 18px;
-    border-radius: var(--r-md);
-    font-size: 0.82rem;
-    font-weight: 500;
-    cursor: pointer;
-    transition: var(--transition);
-    border: none;
-    outline: none;
-    white-space: nowrap;
-    font-family: var(--font-body);
-    letter-spacing: 0.01em;
-  }
-
-  .btn-primary {
-    background: var(--ink);
-    color: #fff;
-  }
-
-  .btn-primary:hover { background: var(--ink-soft); }
-
-  .btn-danger {
-    background: var(--danger-dim);
-    color: var(--danger);
-    border: 1px solid rgba(196,74,58,0.25);
-  }
-
-  .btn-danger:hover { background: rgba(196,74,58,0.18); }
-
-  .btn-ghost {
-    background: transparent;
-    color: var(--stone-dark);
-    border: 1px solid var(--mist);
-  }
-
-  .btn-ghost:hover { background: var(--mist-soft); color: var(--ink); }
-
-  .btn-accent {
-    background: var(--accent);
-    color: var(--ink);
-  }
-
-  .btn-accent:hover { opacity: 0.9; }
-
-  /* ── Mode Selector ── */
-  .mode-selector {
-    display: flex;
-    background: var(--mist-soft);
-    border-radius: var(--r-md);
-    padding: 4px;
-    gap: 2px;
-    border: 1px solid var(--mist);
-    flex-wrap: wrap;
-  }
-
-  .mode-btn {
-    padding: 6px 14px;
-    border-radius: var(--r-sm);
-    cursor: pointer;
-    font-size: 0.78rem;
-    font-family: var(--font-mono);
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
-    transition: var(--transition);
-    color: var(--stone-dark);
-    border: none;
-    background: transparent;
-    outline: none;
-  }
-
-  .mode-btn.active {
-    background: #fff;
-    color: var(--ink);
-    box-shadow: var(--shadow-xs);
-  }
-
-  .mode-btn:hover:not(.active) { color: var(--ink); }
-
-  /* ── FPS Badge ── */
-  .fps-badge {
-    font-family: var(--font-mono);
-    font-size: 0.7rem;
-    letter-spacing: 0.06em;
-    color: var(--stone);
-    display: flex;
-    align-items: center;
-    gap: 5px;
-  }
-
-  /* ── Responsive ── */
-  @media (max-width: 1100px) {
-    .cards-grid { grid-template-columns: repeat(2, 1fr); }
-    .stats-grid { grid-template-columns: repeat(2, 1fr); }
-    .settings-grid { grid-template-columns: 1fr; }
-  }
-
-  @media (max-width: 820px) {
-    .shell { grid-template-columns: 1fr; }
-
-    .sidebar {
-      position: static;
-      height: auto;
-      display: none;
-    }
-
-    .sidebar.mobile-open { display: flex; }
-
-    .main { padding: 20px 16px; gap: 20px; }
-
-    .cards-grid { grid-template-columns: 1fr; }
-    .stats-grid { grid-template-columns: repeat(2, 1fr); }
-
-    .log-row { grid-template-columns: 80px 90px 1fr; }
-    .log-row-conf { display: none; }
-
-    .topbar { padding: 0 16px; }
-    .topbar-time { display: none; }
-  }
-
-  @media (max-width: 480px) {
-    .stats-grid { grid-template-columns: 1fr 1fr; }
-    .topbar-right { gap: 10px; }
-  }
-
-  /* ── Animations ── */
-  @keyframes fadeUp {
-    from { opacity: 0; transform: translateY(8px); }
-    to   { opacity: 1; transform: translateY(0); }
-  }
-
-  .main > * {
-    animation: fadeUp 0.35s cubic-bezier(0.4,0,0.2,1) backwards;
-  }
-
-  .main > *:nth-child(1) { animation-delay: 0.04s; }
-  .main > *:nth-child(2) { animation-delay: 0.08s; }
-  .main > *:nth-child(3) { animation-delay: 0.12s; }
-  .main > *:nth-child(4) { animation-delay: 0.16s; }
-  .main > *:nth-child(5) { animation-delay: 0.20s; }
-  .main > *:nth-child(6) { animation-delay: 0.24s; }
-
-  /* ── Scrollbar global ── */
-  ::-webkit-scrollbar { width: 6px; height: 6px; }
-  ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { background: var(--mist); border-radius: 3px; }
-  ::-webkit-scrollbar-thumb:hover { background: var(--stone); }
-
-  /* Mobile toggle */
-  .mobile-menu-btn {
-    display: none;
-    background: none;
-    border: none;
-    cursor: pointer;
-    color: var(--mist);
-    padding: 6px;
-  }
-
-  @media (max-width: 820px) {
-    .mobile-menu-btn { display: flex; align-items: center; }
-  }
-
-  /* Page sections */
-  .page-section { display: none; }
-  .page-section.active { display: contents; }
-
-  /* Live feed img fills the container exactly */
-  #liveFeedImg {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    display: none;
-  }
-</style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sentinel — School Safety Monitor</title>
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Inter:wght@300;400;500&display=swap" rel="stylesheet" />
 </head>
 <body>
 
-<div class="shell">
-
-  <!-- ══ TOP BAR ══ -->
-  <header class="topbar">
-    <div class="topbar-brand">
-      <button class="mobile-menu-btn" onclick="toggleMobileMenu()" aria-label="Menu">
-        <i data-lucide="menu" width="20" height="20"></i>
-      </button>
-      <div class="topbar-brand-icon">
-        <i data-lucide="shield" width="16" height="16"></i>
-      </div>
-      <span class="brand-name">Sentinel</span>
-      <span class="brand-tagline">Surveillance</span>
+<!-- ══════════════════════════════════════════════
+     TOP NAV BAR
+═══════════════════════════════════════════════ -->
+<header class="topbar">
+  <div class="topbar-left">
+    <div class="logo">
+      <span class="logo-icon">⬡</span>
+      <span class="logo-name">SENTINEL</span>
+      <span class="logo-sub">CAMPUS MONITOR</span>
     </div>
-    <div class="topbar-right">
-      <div class="status-pill offline" id="statusPill">
-        <div class="pulse-dot" id="pulseDot" style="animation:none;background:var(--stone);"></div>
-        <span id="statusText">Offline</span>
-      </div>
-      <div class="topbar-time" id="clockEl"></div>
+  </div>
+
+  <div class="topbar-center">
+    <nav class="tab-nav">
+      <button class="tab-btn active" data-tab="dashboard">Dashboard</button>
+      <button class="tab-btn" data-tab="cameras">All Cameras</button>
+      <button class="tab-btn" data-tab="alerts">Alert Log</button>
+    </nav>
+  </div>
+
+  <div class="topbar-right">
+    <div class="conn-status" id="connStatus">
+      <span class="conn-dot"></span>
+      <span class="conn-label">Connecting…</span>
     </div>
-  </header>
+    <div class="clock" id="clock">--:--:--</div>
+  </div>
+</header>
 
-  <!-- ══ SIDEBAR ══ -->
-  <aside class="sidebar" id="sidebar">
+<!-- ══════════════════════════════════════════════
+     TAB: DASHBOARD
+═══════════════════════════════════════════════ -->
+<main class="tab-content active" id="tab-dashboard">
 
-    <div class="sidebar-section">
-      <div class="sidebar-label">Navigation</div>
-      <a class="nav-item active" onclick="switchPage('dashboard')" href="#">
-        <i data-lucide="layout-dashboard" width="15" height="15"></i>
-        Dashboard
-      </a>
-      <a class="nav-item" onclick="switchPage('settings')" href="#">
-        <i data-lucide="sliders-horizontal" width="15" height="15"></i>
-        Configuration
-      </a>
-      <a class="nav-item" onclick="switchPage('log')" href="#">
-        <i data-lucide="file-text" width="15" height="15"></i>
-        Event Log
-      </a>
-    </div>
+  <!-- ── Left column: video + controls ── -->
+  <section class="col-left">
 
-    <div class="sidebar-section">
-      <div class="sidebar-label">Detection Modules</div>
-
-      <div class="module-toggle" onclick="toggleModule('violence')">
-        <div class="module-toggle-left">
-          <i data-lucide="zap" width="15" height="15" style="color:var(--danger);"></i>
-          <span style="color:var(--mist);font-size:0.85rem;">Violence</span>
-        </div>
-        <div class="toggle-switch on" id="toggle-violence"></div>
-      </div>
-
-      <div class="module-toggle" onclick="toggleModule('litter')">
-        <div class="module-toggle-left">
-          <i data-lucide="trash-2" width="15" height="15" style="color:var(--warn);"></i>
-          <span style="color:var(--mist);font-size:0.85rem;">Littering</span>
-        </div>
-        <div class="toggle-switch on" id="toggle-litter"></div>
-      </div>
-
-      <div class="module-toggle" onclick="toggleModule('fire')">
-        <div class="module-toggle-left">
-          <i data-lucide="flame" width="15" height="15" style="color:var(--danger);"></i>
-          <span style="color:var(--mist);font-size:0.85rem;">Fire / Smoke</span>
-        </div>
-        <div class="toggle-switch on" id="toggle-fire"></div>
-      </div>
-
-      <div class="module-toggle" style="cursor:default;">
-        <div class="module-toggle-left">
-          <i data-lucide="users" width="15" height="15" style="color:var(--accent);"></i>
-          <span style="color:var(--mist);font-size:0.85rem;">Person Counter</span>
-        </div>
-        <div class="toggle-switch on"></div>
+    <!-- Camera selector strip -->
+    <div class="cam-strip">
+      <span class="strip-label">SOURCE</span>
+      <div class="cam-tabs" id="camTabs">
+        <button class="cam-tab active" data-cam="canteen"   data-label="Canteen">Canteen</button>
+        <button class="cam-tab"        data-cam="hallway"   data-label="Hallway">Hallway</button>
+        <button class="cam-tab"        data-cam="classroom1" data-label="Classroom 1">Classroom 1</button>
+        <button class="cam-tab"        data-cam="classroom2" data-label="Classroom 2">Classroom 2</button>
+        <button class="cam-tab"        data-cam="entrance"  data-label="Entrance/Gate">Entrance</button>
       </div>
     </div>
 
-    <div class="sidebar-section">
-      <div class="sidebar-label">Session</div>
-      <div style="padding: 0 4px; display:flex; flex-direction:column; gap:6px;">
-        <div style="display:flex;justify-content:space-between;font-size:0.78rem;color:var(--stone);">
-          <span style="font-family:var(--font-mono);font-size:0.68rem;text-transform:uppercase;letter-spacing:0.06em;">Elapsed</span>
-          <span id="elapsedEl" style="font-family:var(--font-mono);color:var(--mist-soft);">00:00:00</span>
+    <!-- Live feed -->
+    <div class="feed-wrapper" id="feedWrapper">
+      <div class="feed-header">
+        <span class="feed-cam-name" id="feedCamName">CANTEEN</span>
+        <div class="feed-badges">
+          <span class="badge badge-fps" id="fpsBadge">-- FPS</span>
+          <span class="badge badge-persons" id="personsBadge">0 persons</span>
         </div>
-        <div style="display:flex;justify-content:space-between;font-size:0.78rem;color:var(--stone);">
-          <span style="font-family:var(--font-mono);font-size:0.68rem;text-transform:uppercase;letter-spacing:0.06em;">Frames</span>
-          <span id="frameCountSidebar" style="font-family:var(--font-mono);color:var(--mist-soft);">—</span>
+      </div>
+
+      <div class="feed-frame" id="feedFrame">
+        <img id="feedImg" src="/video_feed" alt="live feed" />
+        <div class="feed-overlay-alert" id="feedAlert" style="display:none;"></div>
+        <div class="feed-offline" id="feedOffline" style="display:none;">
+          <div class="offline-icon">⬡</div>
+          <div>FEED OFFLINE</div>
         </div>
-        <div style="display:flex;justify-content:space-between;font-size:0.78rem;color:var(--stone);">
-          <span style="font-family:var(--font-mono);font-size:0.68rem;text-transform:uppercase;letter-spacing:0.06em;">Mode</span>
-          <span id="modeSidebar" style="font-family:var(--font-mono);color:var(--accent);">BOTH</span>
+      </div>
+
+      <!-- Detection confidence bars -->
+      <div class="conf-bars">
+        <div class="conf-row">
+          <span class="conf-label">VIOLENCE</span>
+          <div class="conf-track">
+            <div class="conf-fill fill-violence" id="violenceBar" style="width:0%"></div>
+          </div>
+          <span class="conf-pct" id="violencePct">0%</span>
         </div>
+        <div class="conf-row">
+          <span class="conf-label">LITTER</span>
+          <div class="conf-track">
+            <div class="conf-fill fill-litter" id="litterBar" style="width:0%"></div>
+          </div>
+          <span class="conf-pct" id="litterPct">0 det</span>
+        </div>
+        <div class="conf-row">
+          <span class="conf-label">FIRE/SMOKE</span>
+          <div class="conf-track">
+            <div class="conf-fill fill-fire" id="fireBar" style="width:0%"></div>
+          </div>
+          <span class="conf-pct" id="firePct">CLEAR</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Controls row -->
+    <div class="controls-row">
+      <button class="ctrl-btn btn-start" id="btnStart">▶ START DETECTION</button>
+      <button class="ctrl-btn btn-stop"  id="btnStop" disabled>■ STOP</button>
+      <label class="toggle-wrap">
+        <input type="checkbox" id="annotateToggle" />
+        <span class="toggle-slider"></span>
+        <span class="toggle-text">ANNOTATE</span>
+      </label>
+      <div class="model-status" id="modelStatus">
+        <span class="ms-dot"></span>
+        <span class="ms-label">Models loading…</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Right column: stats + alerts ── -->
+  <aside class="col-right">
+
+    <!-- Stat cards -->
+    <div class="stat-grid">
+      <div class="stat-card card-violence" id="cardViolence">
+        <div class="stat-icon">⚠</div>
+        <div class="stat-body">
+          <div class="stat-title">VIOLENCE</div>
+          <div class="stat-value" id="statViolence">CLEAR</div>
+        </div>
+        <div class="stat-pulse" id="pulseViolence"></div>
+      </div>
+      <div class="stat-card card-litter" id="cardLitter">
+        <div class="stat-icon">◈</div>
+        <div class="stat-body">
+          <div class="stat-title">LITTERING</div>
+          <div class="stat-value" id="statLitter">0</div>
+        </div>
+        <div class="stat-pulse" id="pulseLitter"></div>
+      </div>
+      <div class="stat-card card-fire" id="cardFire">
+        <div class="stat-icon">▲</div>
+        <div class="stat-body">
+          <div class="stat-title">FIRE / SMOKE</div>
+          <div class="stat-value" id="statFire">CLEAR</div>
+        </div>
+        <div class="stat-pulse" id="pulseFire"></div>
+      </div>
+      <div class="stat-card card-persons">
+        <div class="stat-icon">◉</div>
+        <div class="stat-body">
+          <div class="stat-title">PERSONS</div>
+          <div class="stat-value" id="statPersons">0</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Session stats -->
+    <div class="session-panel">
+      <div class="panel-header">SESSION STATS</div>
+      <div class="session-grid">
+        <div class="sess-item"><span class="sess-key">Frames</span><span class="sess-val" id="sessFrames">0</span></div>
+        <div class="sess-item"><span class="sess-key">Alerts</span><span class="sess-val" id="sessAlerts">0</span></div>
+        <div class="sess-item"><span class="sess-key">FPS</span><span class="sess-val" id="sessFPS">--</span></div>
+        <div class="sess-item"><span class="sess-key">Uptime</span><span class="sess-val" id="sessUptime">00:00</span></div>
+      </div>
+    </div>
+
+    <!-- Alert filter + recent events -->
+    <div class="alert-panel">
+      <div class="panel-header">
+        <span>RECENT ALERTS</span>
+        <div class="filter-pills">
+          <button class="pill active" data-filter="all">ALL</button>
+          <button class="pill" data-filter="violence">VIOLENCE</button>
+          <button class="pill" data-filter="littering">LITTER</button>
+          <button class="pill" data-filter="fire">FIRE</button>
+        </div>
+      </div>
+      <div class="alert-list" id="alertList">
+        <div class="alert-empty">No alerts yet. Start detection to begin monitoring.</div>
+      </div>
+      <div class="alert-actions">
+        <button class="link-btn" id="btnClearAlerts">Clear</button>
+        <button class="link-btn" id="btnExportAlerts">Export CSV</button>
       </div>
     </div>
 
   </aside>
+</main>
 
-  <!-- ══ MAIN ══ -->
-  <main class="main" id="mainContent">
+<!-- ══════════════════════════════════════════════
+     TAB: ALL CAMERAS
+═══════════════════════════════════════════════ -->
+<main class="tab-content" id="tab-cameras">
+  <div class="cam-grid-header">
+    <h2>All Camera Feeds</h2>
+    <span class="cam-grid-note">Live MJPEG feeds — each camera is simulated from the same /video_feed source in this demo</span>
+  </div>
+  <div class="cam-grid" id="camGrid">
+    <!-- dynamically injected by script.js -->
+  </div>
+</main>
 
-    <!-- ─ PAGE: Dashboard ─ -->
-    <div id="page-dashboard" class="page-section active" style="display:contents;">
-
-      <!-- Source Bar -->
-      <div class="source-bar">
-        <span class="source-bar-label">Source</span>
-        <input class="source-input" type="text" id="sourceInput" placeholder="0 (webcam) or path/to/video.mp4" value="0">
-        <div class="mode-selector">
-          <button class="mode-btn active" onclick="setMode(this,'both')">Both</button>
-          <button class="mode-btn" onclick="setMode(this,'violence')">Violence</button>
-          <button class="mode-btn" onclick="setMode(this,'litter')">Litter</button>
-        </div>
-        <button class="btn btn-accent" onclick="startDetection()">
-          <i data-lucide="play" width="14" height="14"></i>
-          Start
-        </button>
-        <button class="btn btn-ghost" onclick="stopDetection()">
-          <i data-lucide="square" width="14" height="14"></i>
-          Stop
-        </button>
-        <div class="fps-badge">
-          <i data-lucide="gauge" width="12" height="12"></i>
-          <span id="fpsEl">— fps</span>
-        </div>
+<!-- ══════════════════════════════════════════════
+     TAB: ALERT LOG
+═══════════════════════════════════════════════ -->
+<main class="tab-content" id="tab-alerts">
+  <div class="log-container">
+    <div class="log-toolbar">
+      <h2>Alert Log</h2>
+      <div class="log-filters">
+        <select id="logFilterCam" class="log-select">
+          <option value="all">All Cameras</option>
+          <option value="canteen">Canteen</option>
+          <option value="hallway">Hallway</option>
+          <option value="classroom1">Classroom 1</option>
+          <option value="classroom2">Classroom 2</option>
+          <option value="entrance">Entrance</option>
+        </select>
+        <select id="logFilterType" class="log-select">
+          <option value="all">All Types</option>
+          <option value="violence">Violence</option>
+          <option value="littering">Littering</option>
+          <option value="fire">Fire/Smoke</option>
+        </select>
+        <button class="ctrl-btn btn-stop" id="btnClearLog" style="padding:6px 16px;font-size:11px;">Clear Log</button>
       </div>
-
-      <!-- Alert Banner -->
-      <div class="alert-banner safe" id="alertBanner">
-        <i data-lucide="shield-check" width="18" height="18" id="alertIcon"></i>
-        <div>
-          <div class="alert-banner-label">System Status</div>
-          <div class="alert-banner-text" id="alertText">All modules nominal — no threats detected.</div>
-        </div>
-        <span class="alert-banner-conf" id="alertConf"></span>
-      </div>
-
-      <!-- Feed -->
-      <div>
-        <div class="section-header">
-          <h2 class="section-title">Live Feed</h2>
-          <span class="section-meta" id="feedMeta">No source connected</span>
-        </div>
-        <div class="feed-container">
-          <!-- Placeholder shown before start -->
-          <div class="feed-placeholder" id="feedPlaceholder">
-            <i data-lucide="video-off" width="40" height="40" class="feed-placeholder-icon"></i>
-            <div class="feed-placeholder-text">Awaiting stream connection</div>
-            <div class="feed-crosshair"></div>
-          </div>
-          <!-- Real feed — shown after startDetection() -->
-          <video id="video" autoplay muted playsinline style="width:100%; height:100%; object-fit:cover; display:none;"></video>
-          <img id="annotatedImg" src="" alt="Annotated feed" style="width:100%; height:100%; display:none;" />
-          <canvas id="canvas" style="display:none;"></canvas>
-          <!-- Overlay corners always on top -->
-          <div class="feed-overlay-corner tl" id="overlayTL">SENTINEL · LIVE</div>
-          <div class="feed-overlay-corner tr" id="overlayTR"></div>
-          <div class="feed-overlay-corner bl" id="overlayBL"></div>
-          <div class="feed-overlay-corner br" id="overlayBR"></div>
-        </div>
-      </div>
-
-      <!-- Detection Cards -->
-      <div>
-        <div class="section-header">
-          <h2 class="section-title">Detection Overview</h2>
-          <span class="section-meta" id="lastUpdateEl">—</span>
-        </div>
-        <div class="cards-grid">
-
-          <!-- Violence -->
-          <div class="det-card" id="cardViolence">
-            <div class="det-card-header">
-              <div class="det-card-icon-wrap violence">
-                <i data-lucide="zap" width="16" height="16"></i>
-              </div>
-              <div class="det-card-badge" id="violenceBadge">Monitoring</div>
-            </div>
-            <div class="det-card-name">Violence</div>
-            <div class="det-card-value"><span id="violenceConf">—</span><small>%</small></div>
-            <div class="conf-bar-track">
-              <div class="conf-bar-fill danger" id="violenceBar" style="width:0%"></div>
-            </div>
-          </div>
-
-          <!-- Littering -->
-          <div class="det-card" id="cardLitter">
-            <div class="det-card-header">
-              <div class="det-card-icon-wrap litter">
-                <i data-lucide="trash-2" width="16" height="16"></i>
-              </div>
-              <div class="det-card-badge" id="litterBadge">Monitoring</div>
-            </div>
-            <div class="det-card-name">Littering</div>
-            <div class="det-card-value"><span id="litterCount">—</span><small>obj</small></div>
-            <div class="conf-bar-track">
-              <div class="conf-bar-fill warn" id="litterBar" style="width:0%"></div>
-            </div>
-          </div>
-
-          <!-- Fire -->
-          <div class="det-card" id="cardFire">
-            <div class="det-card-header">
-              <div class="det-card-icon-wrap fire">
-                <i data-lucide="flame" width="16" height="16"></i>
-              </div>
-              <div class="det-card-badge" id="fireBadge">Monitoring</div>
-            </div>
-            <div class="det-card-name">Fire / Smoke</div>
-            <div class="det-card-value" id="fireStatus" style="font-family:var(--font-display);font-size:1.3rem;padding-top:4px;color:var(--stone)">Clear</div>
-            <div class="conf-bar-track">
-              <div class="conf-bar-fill danger" id="fireBar" style="width:0%"></div>
-            </div>
-          </div>
-
-          <!-- Person Count -->
-          <div class="det-card" id="cardPerson">
-            <div class="det-card-header">
-              <div class="det-card-icon-wrap person">
-                <i data-lucide="users" width="16" height="16"></i>
-              </div>
-              <div class="det-card-badge on">Active</div>
-            </div>
-            <div class="det-card-name">Persons in Frame</div>
-            <div class="det-card-value"><span id="personCount">—</span></div>
-            <div class="conf-bar-track">
-              <div class="conf-bar-fill accent" id="personBar" style="width:0%"></div>
-            </div>
-          </div>
-
-        </div>
-      </div>
-
-      <!-- Session Stats -->
-      <div>
-        <div class="section-header">
-          <h2 class="section-title">Session Statistics</h2>
-          <span class="section-meta" id="sessionTimeEl">Session not started</span>
-        </div>
-        <div class="stats-grid">
-          <div class="stat-tile">
-            <div class="stat-tile-label">
-              <i data-lucide="film" width="11" height="11"></i>
-              Frames Processed
-            </div>
-            <div class="stat-tile-value" id="statFrames">0</div>
-            <div class="stat-tile-delta" id="statFpsAvg">—</div>
-          </div>
-          <div class="stat-tile">
-            <div class="stat-tile-label">
-              <i data-lucide="zap" width="11" height="11"></i>
-              Violence Alerts
-            </div>
-            <div class="stat-tile-value" id="statViolence">0</div>
-            <div class="stat-tile-delta" id="statViolencePct">—</div>
-          </div>
-          <div class="stat-tile">
-            <div class="stat-tile-label">
-              <i data-lucide="trash-2" width="11" height="11"></i>
-              Litter Alerts
-            </div>
-            <div class="stat-tile-value" id="statLitter">0</div>
-            <div class="stat-tile-delta" id="statLitterPct">—</div>
-          </div>
-          <div class="stat-tile">
-            <div class="stat-tile-label">
-              <i data-lucide="flame" width="11" height="11"></i>
-              Fire / Smoke Alerts
-            </div>
-            <div class="stat-tile-value" id="statFire">0</div>
-            <div class="stat-tile-delta" id="statFirePct">—</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Event Log Preview -->
-      <div>
-        <div class="section-header">
-          <h2 class="section-title">Recent Events</h2>
-          <button class="btn btn-ghost" onclick="switchPage('log')" style="font-size:0.78rem;padding:6px 12px;">
-            View all <i data-lucide="arrow-right" width="13" height="13"></i>
-          </button>
-        </div>
-        <div class="log-panel">
-          <div class="log-body" id="logPreviewBody">
-            <div class="log-empty">
-              <i data-lucide="inbox" width="24" height="24" style="opacity:0.3;"></i>
-              <div class="log-empty-text">No events recorded this session</div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-    </div><!-- /dashboard -->
-
-    <!-- ─ PAGE: Configuration ─ -->
-    <div id="page-settings" style="display:none; flex-direction:column; gap:24px;">
-
-      <div>
-        <div class="section-header">
-          <h2 class="section-title">Configuration</h2>
-          <span class="section-meta">Changes apply on next start</span>
-        </div>
-
-        <div class="settings-grid">
-
-          <div class="settings-card">
-            <div class="settings-card-title">
-              <i data-lucide="cpu" width="14" height="14"></i>
-              Model Paths
-            </div>
-            <div class="setting-row">
-              <div class="setting-label">Violence Model <span>(ONNX / H5)</span></div>
-              <div class="setting-value" id="cfgViolenceModel">modelnew.onnx</div>
-            </div>
-            <div class="setting-row">
-              <div class="setting-label">Litter Model <span>(ONNX)</span></div>
-              <div class="setting-value" id="cfgLitterModel">yolov8s.onnx</div>
-            </div>
-            <div class="setting-row">
-              <div class="setting-label">Fire Model <span>(.pt)</span></div>
-              <div class="setting-value" id="cfgFireModel">Fire_best.pt</div>
-            </div>
-            <div class="setting-row">
-              <div class="setting-label">Person Model <span>(fallback)</span></div>
-              <div class="setting-value">yolov8n.pt</div>
-            </div>
-          </div>
-
-          <div class="settings-card">
-            <div class="settings-card-title">
-              <i data-lucide="sliders" width="14" height="14"></i>
-              Thresholds
-            </div>
-            <div class="setting-row">
-              <div class="setting-label">Violence</div>
-              <div class="slider-wrap">
-                <input type="range" class="threshold-slider" min="0" max="100" value="80"
-                  oninput="updateSlider(this,'violenceThreshold')">
-                <span class="slider-val" id="violenceThreshold">0.80</span>
-              </div>
-            </div>
-            <div class="setting-row">
-              <div class="setting-label">Littering</div>
-              <div class="slider-wrap">
-                <input type="range" class="threshold-slider" min="0" max="100" value="40"
-                  oninput="updateSlider(this,'litterThreshold')">
-                <span class="slider-val" id="litterThreshold">0.40</span>
-              </div>
-            </div>
-            <div class="setting-row">
-              <div class="setting-label">Fire / Smoke</div>
-              <div class="slider-wrap">
-                <input type="range" class="threshold-slider" min="0" max="100" value="40"
-                  oninput="updateSlider(this,'fireThreshold')">
-                <span class="slider-val" id="fireThreshold">0.40</span>
-              </div>
-            </div>
-            <div class="setting-row">
-              <div class="setting-label">Person</div>
-              <div class="slider-wrap">
-                <input type="range" class="threshold-slider" min="0" max="100" value="40"
-                  oninput="updateSlider(this,'personThreshold')">
-                <span class="slider-val" id="personThreshold">0.40</span>
-              </div>
-            </div>
-          </div>
-
-          <div class="settings-card">
-            <div class="settings-card-title">
-              <i data-lucide="settings-2" width="14" height="14"></i>
-              Performance
-            </div>
-            <div class="setting-row">
-              <div class="setting-label">YOLO Input Size</div>
-              <div class="slider-wrap">
-                <input type="range" class="threshold-slider" min="1" max="4" value="2"
-                  oninput="updateYoloSize(this)">
-                <span class="slider-val" id="yoloSize">320</span>
-              </div>
-            </div>
-            <div class="setting-row">
-              <div class="setting-label">FPS Cap</div>
-              <div class="slider-wrap">
-                <input type="range" class="threshold-slider" min="5" max="60" value="30"
-                  oninput="updateSliderRaw(this,'fpsCap')">
-                <span class="slider-val" id="fpsCap">30</span>
-              </div>
-            </div>
-            <div class="setting-row">
-              <div class="setting-label">Motion Threshold</div>
-              <div class="slider-wrap">
-                <input type="range" class="threshold-slider" min="1" max="50" value="10"
-                  oninput="updateSliderRaw(this,'motionThreshold')">
-                <span class="slider-val" id="motionThreshold">10</span>
-              </div>
-            </div>
-            <div class="setting-row">
-              <div class="setting-label">Save Output Video</div>
-              <div class="toggle-switch on" onclick="this.classList.toggle('on')" style="cursor:pointer;"></div>
-            </div>
-          </div>
-
-          <div class="settings-card">
-            <div class="settings-card-title">
-              <i data-lucide="terminal" width="14" height="14"></i>
-              CLI Equivalent
-            </div>
-            <div style="background:var(--ink);border-radius:var(--r-md);padding:14px;margin-top:4px;">
-              <pre id="cliCommand" style="font-family:var(--font-mono);font-size:0.7rem;color:#a8c0a0;white-space:pre-wrap;line-height:1.7;word-break:break-all;">python server.py \
-  --source 0 \
-  --port 5000</pre>
-            </div>
-            <div style="margin-top:10px;display:flex;gap:8px;">
-              <button class="btn btn-ghost" onclick="copyCLI()" style="font-size:0.75rem;padding:6px 12px;">
-                <i data-lucide="copy" width="12" height="12"></i>
-                Copy command
-              </button>
-              <button class="btn btn-primary" onclick="applySettings()" style="font-size:0.75rem;padding:6px 16px;">
-                Apply & Restart
-              </button>
-            </div>
-          </div>
-
-        </div>
-      </div>
-    </div><!-- /settings -->
-
-    <!-- ─ PAGE: Full Log ─ -->
-    <div id="page-log" style="display:none; flex-direction:column; gap:24px;">
-
-      <div class="section-header">
-        <h2 class="section-title">Event Log</h2>
-        <div style="display:flex;gap:8px;align-items:center;">
-          <button class="btn btn-ghost" onclick="clearLog()" style="font-size:0.78rem;padding:6px 12px;">
-            <i data-lucide="trash" width="13" height="13"></i>
-            Clear
-          </button>
-          <button class="btn btn-ghost" onclick="exportLog()" style="font-size:0.78rem;padding:6px 12px;">
-            <i data-lucide="download" width="13" height="13"></i>
-            Export
-          </button>
-        </div>
-      </div>
-
-      <div class="log-panel">
-        <div class="log-header">
-          <div class="log-header-title">
-            <i data-lucide="list" width="15" height="15" style="color:var(--stone);"></i>
-            All Events
-          </div>
-          <div class="log-filter-row">
-            <button class="filter-chip selected" onclick="filterLog(this,'all')">All</button>
-            <button class="filter-chip" onclick="filterLog(this,'violence')">Violence</button>
-            <button class="filter-chip" onclick="filterLog(this,'litter')">Litter</button>
-            <button class="filter-chip" onclick="filterLog(this,'fire')">Fire</button>
-            <button class="filter-chip" onclick="filterLog(this,'smoke')">Smoke</button>
-          </div>
-        </div>
-        <div class="log-body" id="fullLogBody" style="max-height:520px;">
-          <div class="log-empty">
-            <i data-lucide="inbox" width="24" height="24" style="opacity:0.3;"></i>
-            <div class="log-empty-text">No events recorded this session</div>
-          </div>
-        </div>
-      </div>
-
-    </div><!-- /log -->
-
-  </main>
-</div>
-
-<script>
-// ── Init Lucide ──
-lucide.createIcons();
-
-// ── State ──
-const state = {
-  running: false,
-  mode: 'both',
-  sessionStart: null,
-  frames: 0,
-  violenceAlerts: 0,
-  litterAlerts: 0,
-  fireAlerts: 0,
-  smokeAlerts: 0,
-  modules: { violence: true, litter: true, fire: true },
-  fps: 0,
-  pollInterval: null,
-  events: [],
-  filterActive: 'all',
-  // Track previous alert states to avoid duplicate log entries
-  _prevViolent: false,
-  _prevLitter: false,
-  _prevFire: false,
-  _prevSmoke: false,
-  // Camera and WS
-  ws: null,
-  video: null,
-  canvas: null,
-  ctx: null,
-  stream: null,
-  captureInterval: null,
-};
-
-// ── Clock ──
-function updateClock() {
-  const now = new Date();
-  document.getElementById('clockEl').textContent =
-    now.toLocaleTimeString('en-GB', { hour12: false });
-}
-setInterval(updateClock, 1000);
-updateClock();
-
-// ── Elapsed ──
-function updateElapsed() {
-  if (!state.sessionStart) return;
-  const s = Math.floor((Date.now() - state.sessionStart) / 1000);
-  const h = String(Math.floor(s / 3600)).padStart(2,'0');
-  const m = String(Math.floor((s % 3600) / 60)).padStart(2,'0');
-  const sec = String(s % 60).padStart(2,'0');
-  document.getElementById('elapsedEl').textContent = `${h}:${m}:${sec}`;
-}
-setInterval(updateElapsed, 1000);
-
-// ── Page navigation ──
-function switchPage(page) {
-  ['dashboard','settings','log'].forEach(p => {
-    const el = document.getElementById(`page-${p}`);
-    if (el) el.style.display = p === page ? (p === 'dashboard' ? 'contents' : 'flex') : 'none';
-  });
-  document.querySelectorAll('.nav-item').forEach(el => {
-    if (el.getAttribute('onclick') && el.getAttribute('onclick').includes(page)) {
-      el.classList.add('active');
-    } else {
-      el.classList.remove('active');
-    }
-  });
-}
-
-// ── Mobile menu ──
-function toggleMobileMenu() {
-  document.getElementById('sidebar').classList.toggle('mobile-open');
-}
-
-// ── Module toggles ──
-function toggleModule(mod) {
-  state.modules[mod] = !state.modules[mod];
-  const el = document.getElementById(`toggle-${mod}`);
-  el.classList.toggle('on', state.modules[mod]);
-}
-
-// ── Mode ──
-function setMode(btn, mode) {
-  state.mode = mode;
-  document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-  document.getElementById('modeSidebar').textContent = mode.toUpperCase();
-  refreshCLI();
-}
-
-// ── Sliders ──
-function updateSlider(el, id) {
-  const val = (el.value / 100).toFixed(2);
-  document.getElementById(id).textContent = val;
-  refreshCLI();
-}
-
-function updateSliderRaw(el, id) {
-  document.getElementById(id).textContent = el.value;
-  refreshCLI();
-}
-
-const yoloSizes = [160, 320, 480, 640];
-function updateYoloSize(el) {
-  const v = yoloSizes[el.value - 1];
-  document.getElementById('yoloSize').textContent = v;
-  refreshCLI();
-}
-
-function refreshCLI() {
-  const src = document.getElementById('sourceInput') ? document.getElementById('sourceInput').value || '0' : '0';
-  document.getElementById('cliCommand').textContent =
-    `python server.py \\\n  --source ${src} \\\n  --port 5000`;
-}
-
-function copyCLI() {
-  navigator.clipboard.writeText(document.getElementById('cliCommand').textContent)
-    .then(() => alert('Command copied to clipboard.'));
-}
-
-function applySettings() {
-  alert('Settings will apply on the next detection start.');
-}
-
-// ── Alert Banner ──
-const alertIcons = {
-  safe:    'shield-check',
-  danger:  'shield-alert',
-  warn:    'triangle-alert',
-  smoke:   'wind',
-};
-
-function setAlert(type, text, conf) {
-  const banner = document.getElementById('alertBanner');
-  banner.className = `alert-banner ${type}`;
-  document.getElementById('alertText').textContent = text;
-  document.getElementById('alertConf').textContent = conf || '';
-  const icon = document.getElementById('alertIcon');
-  icon.setAttribute('data-lucide', alertIcons[type] || 'info');
-  lucide.createIcons();
-}
-
-// ── Card states ──
-function setCardState(cardId, cardState) {
-  const card = document.getElementById(cardId);
-  card.className = 'det-card' + (cardState ? ` active-${cardState}` : '');
-}
-
-// ── Log ──
-function addEvent(type, message, conf) {
-  const ts = new Date().toLocaleTimeString('en-GB', { hour12: false });
-  const ev = { type, message, conf, ts, frame: state.frames };
-  state.events.unshift(ev);
-  renderLogs();
-}
-
-function renderLogs() {
-  const filter = state.filterActive;
-  const evs = filter === 'all' ? state.events : state.events.filter(e => e.type === filter);
-  const html = evs.length ? evs.map(e => `
-    <div class="log-row">
-      <div class="log-row-time">${e.ts}</div>
-      <div><span class="log-type-badge ${e.type}">${e.type.toUpperCase()}</span></div>
-      <div class="log-row-msg">${e.message}</div>
-      <div class="log-row-conf">${e.conf ? (e.conf * 100).toFixed(0) + '%' : '—'}</div>
-    </div>`).join('') :
-    `<div class="log-empty">
-      <i data-lucide="inbox" width="24" height="24" style="opacity:0.3;"></i>
-      <div class="log-empty-text">No matching events</div>
-    </div>`;
-
-  const preview = state.events.slice(0,8).map(e => `
-    <div class="log-row">
-      <div class="log-row-time">${e.ts}</div>
-      <div><span class="log-type-badge ${e.type}">${e.type.toUpperCase()}</span></div>
-      <div class="log-row-msg">${e.message}</div>
-      <div class="log-row-conf">${e.conf ? (e.conf * 100).toFixed(0) + '%' : '—'}</div>
-    </div>`).join('');
-
-  document.getElementById('fullLogBody').innerHTML = html;
-  document.getElementById('logPreviewBody').innerHTML = state.events.length ?
-    preview :
-    `<div class="log-empty">
-      <i data-lucide="inbox" width="24" height="24" style="opacity:0.3;"></i>
-      <div class="log-empty-text">No events recorded this session</div>
-    </div>`;
-  lucide.createIcons();
-}
-
-function filterLog(btn, type) {
-  document.querySelectorAll('.filter-chip').forEach(b => b.classList.remove('selected'));
-  btn.classList.add('selected');
-  state.filterActive = type;
-  renderLogs();
-}
-
-function clearLog() {
-  state.events = [];
-  renderLogs();
-}
-
-function exportLog() {
-  const txt = state.events.map(e =>
-    `[${e.ts}] [${e.type.toUpperCase()}] frame:${e.frame} conf:${e.conf||'—'} - ${e.message}`
-  ).join('\n');
-  const blob = new Blob([txt], { type: 'text/plain' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `sentinel_log_${new Date().toISOString().slice(0,10)}.txt`;
-  a.click();
-}
-
-// ── REAL /api/state polling (replaces simulateTick) ──────────────────────────
-async function fetchState() {
-  try {
-    const res = await fetch('/api/state');
-    if (!res.ok) return;
-    const d = await res.json();
-
-    state.frames = d.frame || 0;
-    state.fps    = d.fps   || 0;
-
-    // Update FPS / frame counters
-    document.getElementById('fpsEl').textContent = `${d.fps} fps`;
-    document.getElementById('statFrames').textContent = state.frames.toLocaleString();
-    document.getElementById('frameCountSidebar').textContent = state.frames.toLocaleString();
-
-    const sessionSec = Math.floor((Date.now() - state.sessionStart) / 1000) || 1;
-    const avgFps = (state.frames / sessionSec).toFixed(1);
-    document.getElementById('statFpsAvg').textContent = `avg ${avgFps} fps`;
-
-    document.getElementById('lastUpdateEl').textContent = `Updated ${d.timestamp || '—'}`;
-
-    let alertType = 'safe';
-    let alertText = 'All modules nominal — no threats detected.';
-    let alertConf = '';
-
-    // ── Violence ────────────────────────────────────────────────────────
-    const vConf     = d.v_conf || 0;
-    const isViolent = d.is_violent && state.modules.violence;
-    document.getElementById('violenceConf').textContent = (vConf * 100).toFixed(0);
-    document.getElementById('violenceBar').style.width  = (vConf * 100) + '%';
-    if (isViolent) {
-      document.getElementById('violenceBadge').className = 'det-card-badge alert';
-      document.getElementById('violenceBadge').textContent = 'Alert';
-      setCardState('cardViolence', 'danger');
-      alertType = 'danger';
-      alertText = 'Violence detected in frame.';
-      alertConf = (vConf * 100).toFixed(0) + '% conf';
-      // Only log on rising edge
-      if (!state._prevViolent) {
-        state.violenceAlerts++;
-        document.getElementById('statViolence').textContent = state.violenceAlerts;
-        addEvent('violence', `Violence detected (frame ${state.frames})`, vConf);
-      }
-    } else {
-      document.getElementById('violenceBadge').className = 'det-card-badge on';
-      document.getElementById('violenceBadge').textContent = 'Clear';
-      setCardState('cardViolence', 'safe');
-    }
-    state._prevViolent = isViolent;
-
-    // ── Littering ───────────────────────────────────────────────────────
-    const isLitter  = d.is_littering && state.modules.litter;
-    const litterCnt = (d.litter_dets && d.litter_dets.length) ? d.litter_dets.length : 0;
-    document.getElementById('litterCount').textContent = isLitter ? litterCnt : '—';
-    document.getElementById('litterBar').style.width   = isLitter ? Math.min(50 + litterCnt * 10, 100) + '%' : '0%';
-    if (isLitter) {
-      document.getElementById('litterBadge').className = 'det-card-badge alert';
-      document.getElementById('litterBadge').textContent = 'Alert';
-      setCardState('cardLitter', 'warn');
-      state.litterAlerts++;
-      document.getElementById('statLitter').textContent = state.litterAlerts;
-      if (alertType === 'safe') {
-        alertType = 'warn';
-        alertText = `Littering detected — ${litterCnt} object(s).`;
-      }
-      if (!state._prevLitter) {
-        addEvent('litter', `Littering detected — ${litterCnt} object(s) (frame ${state.frames})`, null);
-      }
-    } else {
-      document.getElementById('litterBadge').className = 'det-card-badge on';
-      document.getElementById('litterBadge').textContent = 'Clear';
-      if (!isViolent) setCardState('cardLitter', 'safe');
-    }
-    state._prevLitter = isLitter;
-
-    // ── Fire / Smoke ────────────────────────────────────────────────────
-    const isFire  = d.is_fire  && state.modules.fire;
-    const isSmoke = d.is_smoke && state.modules.fire;
-    let fireText = 'Clear';
-    if (isFire && isSmoke)  fireText = 'Fire + Smoke';
-    else if (isFire)        fireText = 'Fire';
-    else if (isSmoke)       fireText = 'Smoke';
-    document.getElementById('fireStatus').textContent = fireText;
-    document.getElementById('fireStatus').style.color = (isFire || isSmoke) ? '' : 'var(--stone)';
-    document.getElementById('fireBar').style.width = (isFire || isSmoke) ? '75%' : '0%';
-    if (isFire) {
-      document.getElementById('fireBadge').className = 'det-card-badge alert';
-      document.getElementById('fireBadge').textContent = 'Alert';
-      setCardState('cardFire', 'danger');
-      state.fireAlerts++;
-      document.getElementById('statFire').textContent = state.fireAlerts;
-      if (alertType === 'safe') { alertType = 'danger'; alertText = 'Fire detected!'; }
-      if (!state._prevFire) {
-        addEvent('fire', `Fire detected in frame ${state.frames}`, 0.9);
-      }
-    } else if (isSmoke) {
-      document.getElementById('fireBadge').className = 'det-card-badge alert';
-      document.getElementById('fireBadge').textContent = 'Smoke';
-      setCardState('cardFire', 'smoke');
-      state.smokeAlerts++;
-      document.getElementById('statFire').textContent = state.fireAlerts;
-      if (alertType === 'safe') { alertType = 'smoke'; alertText = 'Smoke detected.'; }
-      if (!state._prevSmoke) {
-        addEvent('smoke', `Smoke detected in frame ${state.frames}`, 0.75);
-      }
-    } else {
-      document.getElementById('fireBadge').className = 'det-card-badge on';
-      document.getElementById('fireBadge').textContent = 'Clear';
-      if (!isViolent && !isLitter) setCardState('cardFire', 'safe');
-    }
-    state._prevFire  = isFire;
-    state._prevSmoke = isSmoke;
-
-    // ── Person count ────────────────────────────────────────────────────
-    const pc = d.person_count || 0;
-    document.getElementById('personCount').textContent = pc;
-    document.getElementById('personBar').style.width = Math.min(pc / 8 * 100, 100) + '%';
-
-    // ── Stats pct ───────────────────────────────────────────────────────
-    const pct = v => state.frames ? ((v / state.frames) * 100).toFixed(1) + '% of frames' : '—';
-    document.getElementById('statViolencePct').textContent = pct(state.violenceAlerts);
-    document.getElementById('statLitterPct').textContent   = pct(state.litterAlerts);
-    document.getElementById('statFirePct').textContent     = pct(state.fireAlerts + state.smokeAlerts);
-
-    // ── Alert banner ────────────────────────────────────────────────────
-    setAlert(alertType, alertText, alertConf);
-
-    // ── Overlay corners ─────────────────────────────────────────────────
-    document.getElementById('overlayTR').textContent = `${d.fps} fps  ·  frame ${d.frame}`;
-    document.getElementById('overlayBL').textContent = new Date().toLocaleString('en-GB');
-    document.getElementById('overlayBR').textContent = `MODE: ${state.mode.toUpperCase()}`;
-
-    lucide.createIcons();
-  } catch (e) {
-    // Server not reachable — keep UI stable, don't crash
-    console.warn('[Sentinel] /api/state fetch failed:', e);
-  }
-}
-
-// ── Camera & WebSocket ───────────────────────────────────────────────────────
-async function startCamera() {
-  try {
-    state.video = document.getElementById('video');
-    state.canvas = document.getElementById('canvas');
-    state.ctx = state.canvas.getContext('2d');
-
-    state.stream = await navigator.mediaDevices.getUserMedia({ video: true });
-    state.video.srcObject = state.stream;
-    await state.video.play();
-
-    // Show video
-    document.getElementById('feedPlaceholder').style.display = 'none';
-    state.video.style.display = 'block';
-
-    // Connect WebSocket
-    const wsUrl = `ws://localhost:5000`;
-    state.ws = new WebSocket(wsUrl);
-    state.ws.onopen = () => {
-      console.log('WebSocket connected');
-      // Start capturing frames
-      state.captureInterval = setInterval(captureAndSend, 100); // 10 fps
-    };
-    state.ws.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      handleResult(data);
-    };
-    state.ws.onerror = (error) => {
-      console.error('WebSocket error:', error);
-      setAlert('danger', 'Connection Error', 'Failed to connect to detection server', '');
-    };
-    state.ws.onclose = () => {
-      console.log('WebSocket closed');
-    };
-
-  } catch (error) {
-    console.error('Camera error:', error);
-    setAlert('danger', 'Camera Error', 'Unable to access camera: ' + error.message, '');
-  }
-}
-
-function captureAndSend() {
-  if (!state.running || !state.video || state.video.readyState < 2) return;
-
-  state.canvas.width = state.video.videoWidth;
-  state.canvas.height = state.video.videoHeight;
-  state.ctx.drawImage(state.video, 0, 0);
-
-  const frameData = state.canvas.toDataURL('image/jpeg', 0.8);
-  if (state.ws && state.ws.readyState === WebSocket.OPEN) {
-    state.ws.send(JSON.stringify({ frame: frameData }));
-  }
-}
-
-function handleResult(data) {
-  state.frames++;
-
-  // Update annotated image
-  if (data.annotated_frame) {
-    const img = document.getElementById('annotatedImg');
-    img.src = data.annotated_frame;
-    img.style.display = 'block';
-    state.video.style.display = 'none';
-  }
-
-  // Update UI with detection data
-  document.getElementById('fpsEl').textContent = `${data.fps || 0} fps`;
-  document.getElementById('overlayTR').textContent = `${data.fps || 0} fps · frame ${state.frames}`;
-
-  // Violence
-  const vConf = data.violence_confidence || 0;
-  document.getElementById('violenceConf').textContent = `${Math.round(vConf * 100)}%`;
-  document.getElementById('violenceBar').style.width = `${vConf * 100}%`;
-  if (data.is_violent && !state._prevViolent) {
-    state.violenceAlerts++;
-    addEvent('violence', `Violence detected (${Math.round(vConf * 100)}% confidence)`, vConf);
-  }
-  state._prevViolent = data.is_violent;
-
-  // Litter
-  const litterCount = data.litter_detections ? data.litter_detections.length : 0;
-  document.getElementById('litterCount').textContent = litterCount;
-  document.getElementById('litterBar').style.width = `${Math.min(litterCount * 10, 100)}%`;
-  if (data.is_littering && !state._prevLitter) {
-    state.litterAlerts++;
-    addEvent('litter', `Littering detected (${litterCount} objects)`, 0.8);
-  }
-  state._prevLitter = data.is_littering;
-
-  // Fire/Smoke
-  if (data.is_fire && !state._prevFire) {
-    state.fireAlerts++;
-    addEvent('fire', 'Fire detected', 0.9);
-  }
-  state._prevFire = data.is_fire;
-  if (data.is_smoke && !state._prevSmoke) {
-    state.smokeAlerts++;
-    addEvent('smoke', 'Smoke detected', 0.7);
-  }
-  state._prevSmoke = data.is_smoke;
-
-  // Person count
-  document.getElementById('personCount').textContent = data.person_count || 0;
-}
-
-// ── Start / Stop ──────────────────────────────────────────────────────────────
-function startDetection() {
-  if (state.running) return;
-  state.running     = true;
-  state.sessionStart = Date.now();
-
-  // Start camera and WebSocket
-  startCamera();
-
-  document.getElementById('feedMeta').textContent = 'Source: Client Camera';
-  document.getElementById('sessionTimeEl').textContent = 'Session active';
-
-  const pill = document.getElementById('statusPill');
-  pill.className = 'status-pill live';
-  document.getElementById('statusText').textContent = 'Live';
-  document.getElementById('pulseDot').style.animation = '';
-  document.getElementById('pulseDot').style.background = 'var(--safe)';
-
-  setAlert('safe', 'Detection active — monitoring all modules.', '');
-
-  refreshCLI();
-}
-
-function stopDetection() {
-  if (!state.running) return;
-  state.running = false;
-  clearInterval(state.captureInterval);
-
-  // Stop camera
-  if (state.stream) {
-    state.stream.getTracks().forEach(track => track.stop());
-    state.stream = null;
-  }
-  if (state.video) {
-    state.video.srcObject = null;
-    state.video.style.display = 'none';
-  }
-
-  // Close WebSocket
-  if (state.ws) {
-    state.ws.close();
-    state.ws = null;
-  }
-
-  // Hide annotated img
-  const img = document.getElementById('annotatedImg');
-  img.src = '';
-  img.style.display = 'none';
-
-  // Restore placeholder
-  document.getElementById('feedPlaceholder').style.display = '';
-
-  const pill = document.getElementById('statusPill');
-  pill.className = 'status-pill offline';
-  document.getElementById('statusText').textContent = 'Stopped';
-  document.getElementById('pulseDot').style.animation = 'none';
-  document.getElementById('pulseDot').style.background = 'var(--stone)';
-  document.getElementById('fpsEl').textContent = '— fps';
-  setAlert('safe', 'Detection stopped.', '');
-  document.getElementById('sessionTimeEl').textContent = 'Session ended';
-  document.getElementById('overlayTR').textContent = '';
-  document.getElementById('overlayBL').textContent = '';
-  document.getElementById('overlayBR').textContent = '';
-}
-
-// Initial render
-renderLogs();
-refreshCLI();
-</script>
+    </div>
+    <table class="log-table">
+      <thead>
+        <tr>
+          <th>Time</th>
+          <th>Camera</th>
+          <th>Type</th>
+          <th>Detail</th>
+          <th>Severity</th>
+        </tr>
+      </thead>
+      <tbody id="logTableBody">
+        <tr><td colspan="5" class="log-empty">No alerts recorded yet.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</main>
+
+<script src="script.js"></script>
 </body>
 </html>
