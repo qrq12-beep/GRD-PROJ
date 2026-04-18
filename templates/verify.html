@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <main class="auth-shell">
+    <section class="auth-card">
+      <div class="auth-copy">
+        <span class="eyebrow">Sign in</span>
+        <h1>This page is not in use</h1>
+        <p>Return to the login page to continue.</p>
+      </div>
+
+      <div class="form-card">
+        <a href="{{ url_for('login') }}" class="primary-btn form-btn">Go to login</a>
+      </div>
+    </section>
+  </main>
+{% endblock %}
+
+{% block page_data %}
+  <script>
+    window.PLITHOS = { page: "login" };
+  </script>
+{% endblock %}

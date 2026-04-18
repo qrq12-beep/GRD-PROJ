@@ -1,0 +1,132 @@
+﻿{% extends "base.html" %}
+
+{% block content %}
+  <main class="content-shell">
+    <section class="panel page-panel">
+      <div class="section-head">
+        <div>
+          <span class="eyebrow">Logs</span>
+          <h1 class="page-title">Alert history</h1>
+          <p class="page-copy">Search by camera, type, date, or keyword.</p>
+        </div>
+        <div class="toolbar-inline wrap">
+          <a
+            href="{{ url_for('logs_export', camera=filters.camera, type=filters.type, search=filters.search, date_from=filters.date_from, date_to=filters.date_to) }}"
+            class="ghost-btn"
+          >
+            Export CSV
+          </a>
+          <form method="post" action="{{ url_for('logs_clear') }}" onsubmit="return confirm('Clear all logs for this account?');">
+            <button type="submit" class="danger-btn">Clear logs</button>
+          </form>
+        </div>
+      </div>
+
+      <form method="get" class="filter-form">
+        <label class="form-field">
+          <span>Camera</span>
+          <select name="camera">
+            <option value="">All cameras</option>
+            {% for camera in cameras %}
+              <option value="{{ camera['id'] }}" {% if filters.camera == camera['id'] %}selected{% endif %}>{{ camera['name'] }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label class="form-field">
+          <span>Type</span>
+          <select name="type">
+            <option value="all" {% if filters.type == 'all' %}selected{% endif %}>All types</option>
+            <option value="violence" {% if filters.type == 'violence' %}selected{% endif %}>Violence</option>
+            <option value="safety" {% if filters.type == 'safety' %}selected{% endif %}>Safety</option>
+            <option value="fire" {% if filters.type == 'fire' %}selected{% endif %}>Fire</option>
+          </select>
+        </label>
+        <label class="form-field">
+          <span>From</span>
+          <input type="date" name="date_from" value="{{ filters.date_from }}" />
+        </label>
+        <label class="form-field">
+          <span>To</span>
+          <input type="date" name="date_to" value="{{ filters.date_to }}" />
+        </label>
+        <label class="form-field wide-field">
+          <span>Search</span>
+          <input type="text" name="search" value="{{ filters.search }}" placeholder="Camera name or detail" />
+        </label>
+        <button type="submit" class="primary-btn filter-submit">Apply</button>
+      </form>
+
+      <div class="charts-grid">
+        <article class="chart-card">
+          <span class="metric-label">By type</span>
+          <div class="bar-list">
+            {% for key, label in {'violence': 'Violence', 'safety': 'Safety', 'fire': 'Fire'}.items() %}
+              {% set count = type_summary.get(key, 0) %}
+              <div class="bar-row">
+                <span>{{ label }}</span>
+                <div class="bar-track"><div class="bar-fill" style="width: {{ (count * 100 / (type_max or 1)) if count else 0 }}%"></div></div>
+                <strong>{{ count }}</strong>
+              </div>
+            {% endfor %}
+          </div>
+        </article>
+        <article class="chart-card">
+          <span class="metric-label">Over time</span>
+          <div class="bar-list">
+            {% if trend %}
+              {% for item in trend %}
+                <div class="bar-row">
+                  <span>{{ item.label }}</span>
+                  <div class="bar-track"><div class="bar-fill" style="width: {{ (item.count * 100 / (trend_max or 1)) if item.count else 0 }}%"></div></div>
+                  <strong>{{ item.count }}</strong>
+                </div>
+              {% endfor %}
+            {% else %}
+              <div class="empty-state">No alert data for the selected range.</div>
+            {% endif %}
+          </div>
+        </article>
+      </div>
+
+      <div class="table-wrap">
+        <table class="logs-table">
+          <thead>
+            <tr>
+              <th>Started</th>
+              <th>Ended</th>
+              <th>Duration</th>
+              <th>Camera</th>
+              <th>Type</th>
+              <th>Persons</th>
+              <th>Footage</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% if rows %}
+              {% for row in rows %}
+                <tr>
+                  <td>{{ row['started_at'][:19]|replace('T', ' ') if row['started_at'] else '--' }}</td>
+                  <td>{{ row['ended_at'][:19]|replace('T', ' ') if row['ended_at'] else 'Active' }}</td>
+                  <td>{{ row['duration_label'] }}</td>
+                  <td>{{ row['camera_name'] }}</td>
+                  <td>{{ row['type']|title }}</td>
+                  <td>{{ row['persons'] or '--' }}</td>
+                  <td>
+                    {% if row['evidence_url'] %}
+                      <a href="{{ row['evidence_url'] }}" target="_blank" rel="noopener">Open</a>
+                    {% else %}
+                      Pending
+                    {% endif %}
+                  </td>
+                </tr>
+              {% endfor %}
+            {% else %}
+              <tr><td colspan="7" class="empty-table">No matching alerts.</td></tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+{% endblock %}
+

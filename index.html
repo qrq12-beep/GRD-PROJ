@@ -1,253 +1,499 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Sentinel — School Safety Monitor</title>
-  <link rel="stylesheet" href="styles.css" />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Inter:wght@300;400;500&display=swap" rel="stylesheet" />
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Plithos — Dashboard</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+<link href="css/plithos.css" rel="stylesheet">
 </head>
 <body>
+<div class="overlay-bg" id="overlayBg"></div>
 
-<!-- ══════════════════════════════════════════════
-     TOP NAV BAR
-═══════════════════════════════════════════════ -->
-<header class="topbar">
-  <div class="topbar-left">
-    <div class="logo">
-      <span class="logo-icon">⬡</span>
-      <span class="logo-name">SENTINEL</span>
-      <span class="logo-sub">CAMPUS MONITOR</span>
+<div class="shell" id="shell">
+
+  <!-- ══ SIDEBAR ═══════════════════════════════════════════════ -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-logo">
+      <div class="sidebar-logo-icon"><i class="bi bi-shield-check"></i></div>
+      <span class="sidebar-logo-text">Plithos</span>
     </div>
-  </div>
 
-  <div class="topbar-center">
-    <nav class="tab-nav">
-      <button class="tab-btn active" data-tab="dashboard">Dashboard</button>
-      <button class="tab-btn" data-tab="cameras">All Cameras</button>
-      <button class="tab-btn" data-tab="alerts">Alert Log</button>
+    <nav class="sidebar-nav">
+      <div class="sidebar-section-title">Operations</div>
+
+      <a href="index.html" class="nav-item active">
+        <i class="bi bi-grid-1x2-fill"></i>
+        <span class="nav-label">Dashboard</span>
+      </a>
+      <a href="monitor.html" class="nav-item">
+        <i class="bi bi-camera-video-fill"></i>
+        <span class="nav-label">Live Monitor</span>
+      </a>
+      <a href="alert-triage.html" class="nav-item">
+        <i class="bi bi-exclamation-triangle-fill"></i>
+        <span class="nav-label">Alert Triage</span>
+        <span class="nav-badge">3</span>
+      </a>
+
+      <div class="sidebar-section-title">Intelligence</div>
+
+      <a href="analytics.html" class="nav-item">
+        <i class="bi bi-bar-chart-line-fill"></i>
+        <span class="nav-label">Analytics</span>
+      </a>
+      <a href="#" class="nav-item">
+        <i class="bi bi-cpu-fill"></i>
+        <span class="nav-label">AI Models</span>
+      </a>
+
+      <div class="sidebar-section-title">System</div>
+
+      <a href="#" class="nav-item">
+        <i class="bi bi-gear-fill"></i>
+        <span class="nav-label">Settings</span>
+      </a>
     </nav>
-  </div>
 
-  <div class="topbar-right">
-    <div class="conn-status" id="connStatus">
-      <span class="conn-dot"></span>
-      <span class="conn-label">Connecting…</span>
+    <div class="sidebar-bottom">
+      <div class="cloud-widget">
+        <div class="cloud-label">
+          <span>Cloud Budget</span>
+          <i class="bi bi-cloud-check" style="color:var(--green);"></i>
+        </div>
+        <div class="cloud-bar-track"><div class="cloud-bar-fill"></div></div>
+        <div class="cloud-budget">$42.50 / $100.00</div>
+      </div>
+      <button class="collapse-trigger" id="collapseBtn">
+        <i class="bi bi-chevron-left"></i>
+        <span>Collapse</span>
+      </button>
     </div>
-    <div class="clock" id="clock">--:--:--</div>
-  </div>
-</header>
-
-<!-- ══════════════════════════════════════════════
-     TAB: DASHBOARD
-═══════════════════════════════════════════════ -->
-<main class="tab-content active" id="tab-dashboard">
-
-  <!-- ── Left column: video + controls ── -->
-  <section class="col-left">
-
-    <!-- Camera selector strip -->
-    <div class="cam-strip">
-      <span class="strip-label">SOURCE</span>
-      <div class="cam-tabs" id="camTabs">
-        <button class="cam-tab active" data-cam="canteen"   data-label="Canteen">Canteen</button>
-        <button class="cam-tab"        data-cam="hallway"   data-label="Hallway">Hallway</button>
-        <button class="cam-tab"        data-cam="classroom1" data-label="Classroom 1">Classroom 1</button>
-        <button class="cam-tab"        data-cam="classroom2" data-label="Classroom 2">Classroom 2</button>
-        <button class="cam-tab"        data-cam="entrance"  data-label="Entrance/Gate">Entrance</button>
-      </div>
-    </div>
-
-    <!-- Live feed -->
-    <div class="feed-wrapper" id="feedWrapper">
-      <div class="feed-header">
-        <span class="feed-cam-name" id="feedCamName">CANTEEN</span>
-        <div class="feed-badges">
-          <span class="badge badge-fps" id="fpsBadge">-- FPS</span>
-          <span class="badge badge-persons" id="personsBadge">0 persons</span>
-        </div>
-      </div>
-
-      <div class="feed-frame" id="feedFrame">
-        <img id="feedImg" src="/video_feed" alt="live feed" />
-        <div class="feed-overlay-alert" id="feedAlert" style="display:none;"></div>
-        <div class="feed-offline" id="feedOffline" style="display:none;">
-          <div class="offline-icon">⬡</div>
-          <div>FEED OFFLINE</div>
-        </div>
-      </div>
-
-      <!-- Detection confidence bars -->
-      <div class="conf-bars">
-        <div class="conf-row">
-          <span class="conf-label">VIOLENCE</span>
-          <div class="conf-track">
-            <div class="conf-fill fill-violence" id="violenceBar" style="width:0%"></div>
-          </div>
-          <span class="conf-pct" id="violencePct">0%</span>
-        </div>
-        <div class="conf-row">
-          <span class="conf-label">LITTER</span>
-          <div class="conf-track">
-            <div class="conf-fill fill-litter" id="litterBar" style="width:0%"></div>
-          </div>
-          <span class="conf-pct" id="litterPct">0 det</span>
-        </div>
-        <div class="conf-row">
-          <span class="conf-label">FIRE/SMOKE</span>
-          <div class="conf-track">
-            <div class="conf-fill fill-fire" id="fireBar" style="width:0%"></div>
-          </div>
-          <span class="conf-pct" id="firePct">CLEAR</span>
-        </div>
-      </div>
-    </div>
-
-    <!-- Controls row -->
-    <div class="controls-row">
-      <button class="ctrl-btn btn-start" id="btnStart">▶ START DETECTION</button>
-      <button class="ctrl-btn btn-stop"  id="btnStop" disabled>■ STOP</button>
-      <label class="toggle-wrap">
-        <input type="checkbox" id="annotateToggle" />
-        <span class="toggle-slider"></span>
-        <span class="toggle-text">ANNOTATE</span>
-      </label>
-      <div class="model-status" id="modelStatus">
-        <span class="ms-dot"></span>
-        <span class="ms-label">Models loading…</span>
-      </div>
-    </div>
-  </section>
-
-  <!-- ── Right column: stats + alerts ── -->
-  <aside class="col-right">
-
-    <!-- Stat cards -->
-    <div class="stat-grid">
-      <div class="stat-card card-violence" id="cardViolence">
-        <div class="stat-icon">⚠</div>
-        <div class="stat-body">
-          <div class="stat-title">VIOLENCE</div>
-          <div class="stat-value" id="statViolence">CLEAR</div>
-        </div>
-        <div class="stat-pulse" id="pulseViolence"></div>
-      </div>
-      <div class="stat-card card-litter" id="cardLitter">
-        <div class="stat-icon">◈</div>
-        <div class="stat-body">
-          <div class="stat-title">LITTERING</div>
-          <div class="stat-value" id="statLitter">0</div>
-        </div>
-        <div class="stat-pulse" id="pulseLitter"></div>
-      </div>
-      <div class="stat-card card-fire" id="cardFire">
-        <div class="stat-icon">▲</div>
-        <div class="stat-body">
-          <div class="stat-title">FIRE / SMOKE</div>
-          <div class="stat-value" id="statFire">CLEAR</div>
-        </div>
-        <div class="stat-pulse" id="pulseFire"></div>
-      </div>
-      <div class="stat-card card-persons">
-        <div class="stat-icon">◉</div>
-        <div class="stat-body">
-          <div class="stat-title">PERSONS</div>
-          <div class="stat-value" id="statPersons">0</div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Session stats -->
-    <div class="session-panel">
-      <div class="panel-header">SESSION STATS</div>
-      <div class="session-grid">
-        <div class="sess-item"><span class="sess-key">Frames</span><span class="sess-val" id="sessFrames">0</span></div>
-        <div class="sess-item"><span class="sess-key">Alerts</span><span class="sess-val" id="sessAlerts">0</span></div>
-        <div class="sess-item"><span class="sess-key">FPS</span><span class="sess-val" id="sessFPS">--</span></div>
-        <div class="sess-item"><span class="sess-key">Uptime</span><span class="sess-val" id="sessUptime">00:00</span></div>
-      </div>
-    </div>
-
-    <!-- Alert filter + recent events -->
-    <div class="alert-panel">
-      <div class="panel-header">
-        <span>RECENT ALERTS</span>
-        <div class="filter-pills">
-          <button class="pill active" data-filter="all">ALL</button>
-          <button class="pill" data-filter="violence">VIOLENCE</button>
-          <button class="pill" data-filter="littering">LITTER</button>
-          <button class="pill" data-filter="fire">FIRE</button>
-        </div>
-      </div>
-      <div class="alert-list" id="alertList">
-        <div class="alert-empty">No alerts yet. Start detection to begin monitoring.</div>
-      </div>
-      <div class="alert-actions">
-        <button class="link-btn" id="btnClearAlerts">Clear</button>
-        <button class="link-btn" id="btnExportAlerts">Export CSV</button>
-      </div>
-    </div>
-
   </aside>
-</main>
 
-<!-- ══════════════════════════════════════════════
-     TAB: ALL CAMERAS
-═══════════════════════════════════════════════ -->
-<main class="tab-content" id="tab-cameras">
-  <div class="cam-grid-header">
-    <h2>All Camera Feeds</h2>
-    <span class="cam-grid-note">Live MJPEG feeds — each camera is simulated from the same /video_feed source in this demo</span>
-  </div>
-  <div class="cam-grid" id="camGrid">
-    <!-- dynamically injected by script.js -->
-  </div>
-</main>
-
-<!-- ══════════════════════════════════════════════
-     TAB: ALERT LOG
-═══════════════════════════════════════════════ -->
-<main class="tab-content" id="tab-alerts">
-  <div class="log-container">
-    <div class="log-toolbar">
-      <h2>Alert Log</h2>
-      <div class="log-filters">
-        <select id="logFilterCam" class="log-select">
-          <option value="all">All Cameras</option>
-          <option value="canteen">Canteen</option>
-          <option value="hallway">Hallway</option>
-          <option value="classroom1">Classroom 1</option>
-          <option value="classroom2">Classroom 2</option>
-          <option value="entrance">Entrance</option>
-        </select>
-        <select id="logFilterType" class="log-select">
-          <option value="all">All Types</option>
-          <option value="violence">Violence</option>
-          <option value="littering">Littering</option>
-          <option value="fire">Fire/Smoke</option>
-        </select>
-        <button class="ctrl-btn btn-stop" id="btnClearLog" style="padding:6px 16px;font-size:11px;">Clear Log</button>
+  <!-- ══ NAVBAR ════════════════════════════════════════════════ -->
+  <header class="navbar">
+    <button class="navbar-mobile-btn" id="mobileMenuBtn"><i class="bi bi-list"></i></button>
+    <div class="navbar-search">
+      <i class="bi bi-search"></i>
+      <input type="text" placeholder="Search cameras, alerts, logs…">
+    </div>
+    <div class="navbar-right">
+      <div class="soc-badge"><span class="soc-dot"></span><span>SOC LIVE</span></div>
+      <button class="notif-btn"><i class="bi bi-bell"></i><span class="notif-pip"></span></button>
+      <div class="user-chip">
+        <div>
+          <div class="user-chip-name">Command Center</div>
+          <div class="user-chip-role">Senior Operator</div>
+        </div>
+        <div class="user-avatar">SC</div>
       </div>
     </div>
-    <table class="log-table">
-      <thead>
-        <tr>
-          <th>Time</th>
-          <th>Camera</th>
-          <th>Type</th>
-          <th>Detail</th>
-          <th>Severity</th>
-        </tr>
-      </thead>
-      <tbody id="logTableBody">
-        <tr><td colspan="5" class="log-empty">No alerts recorded yet.</td></tr>
-      </tbody>
-    </table>
-  </div>
-</main>
+  </header>
 
-<script src="script.js"></script>
+  <!-- ══ MAIN ══════════════════════════════════════════════════ -->
+  <main class="main">
+
+    <!-- Page header -->
+    <div class="page-hdr">
+      <div class="page-hdr-left">
+        <h1>Monitoring Dashboard <span class="chip chip-green" style="font-size:10px;vertical-align:middle;">NOMINAL</span></h1>
+        <p>Real-time AI surveillance across 24 localized camera clusters.</p>
+      </div>
+      <div class="page-hdr-right">
+        <button class="btn btn-ghost"><i class="bi bi-clock-history"></i> Audit Logs</button>
+        <button class="btn btn-primary"><i class="bi bi-bullseye"></i> Quick Action</button>
+      </div>
+    </div>
+
+    <!-- KPI row -->
+    <div class="grid grid-4 mb-5 fade-up">
+      <div class="kpi blue fade-up-1">
+        <div class="kpi-icon blue"><i class="bi bi-camera-video-fill"></i></div>
+        <span class="kpi-trend up"><i class="bi bi-arrow-up-short"></i>0%</span>
+        <div class="kpi-label">Cameras Online</div>
+        <div class="kpi-value">24 / 24</div>
+      </div>
+      <div class="kpi red fade-up-2">
+        <div class="kpi-icon red"><i class="bi bi-exclamation-circle-fill"></i></div>
+        <span class="kpi-trend warn"><i class="bi bi-arrow-up-short"></i>24%</span>
+        <div class="kpi-label">Active Alerts</div>
+        <div class="kpi-value">03</div>
+      </div>
+      <div class="kpi cyan fade-up-3">
+        <div class="kpi-icon cyan"><i class="bi bi-lightning-charge-fill"></i></div>
+        <span class="kpi-trend up"><i class="bi bi-arrow-up-short"></i>8%</span>
+        <div class="kpi-label">Detections (24H)</div>
+        <div class="kpi-value">1,422</div>
+      </div>
+      <div class="kpi green fade-up-4">
+        <div class="kpi-icon green"><i class="bi bi-speedometer2"></i></div>
+        <span class="kpi-trend down"><i class="bi bi-arrow-down-short"></i>2%</span>
+        <div class="kpi-label">Inference Latency</div>
+        <div class="kpi-value">14ms</div>
+      </div>
+    </div>
+
+    <!-- Camera grid + Incident panel -->
+    <div class="grid grid-8-4 mb-5 fade-up fade-up-2">
+
+      <!-- Camera grid -->
+      <div>
+        <div class="flex-between mb-3">
+          <div class="flex items-center gap-3">
+            <span style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.3px;">Live Camera Cluster A</span>
+            <span class="chip chip-cyan" style="animation:blink 2s infinite;">SYNCING</span>
+          </div>
+          <div class="flex gap-2">
+            <button class="btn btn-ghost" style="padding:5px 10px;font-size:11px;">Grid</button>
+            <button class="btn btn-ghost" style="padding:5px 10px;font-size:11px;">List</button>
+          </div>
+        </div>
+
+        <div class="grid grid-3" style="gap:12px;">
+
+          <!-- CAM-01 -->
+          <div class="cam-card">
+            <div class="cam-feed">
+              <div class="cam-feed-overlay">
+                <div class="flex-between">
+                  <span class="cam-id-tag"><i class="bi bi-record-circle" style="color:var(--green);"></i>CAM-01</span>
+                  <div class="cam-stats">FPS: 30<br>LAT: 12ms</div>
+                </div>
+                <div class="cam-bottom">
+                  <span class="cam-location">Main Lobby</span>
+                  <span class="cam-model-tag">LSTM V4</span>
+                </div>
+              </div>
+            </div>
+            <div class="cam-info">
+              <div>
+                <div class="cam-info-name">Main Lobby Entrance</div>
+                <div class="cam-info-sub">CLUSTER-A · ZONE-1</div>
+              </div>
+              <span class="chip chip-green" style="font-size:9px;">Online</span>
+            </div>
+          </div>
+
+          <!-- CAM-02 -->
+          <div class="cam-card">
+            <div class="cam-feed">
+              <div class="cam-feed-overlay">
+                <div class="flex-between">
+                  <span class="cam-id-tag"><i class="bi bi-record-circle" style="color:var(--green);"></i>CAM-02</span>
+                  <div class="cam-stats">FPS: 24<br>LAT: 15ms</div>
+                </div>
+                <div class="cam-bottom">
+                  <span class="cam-location">Parking Lot A</span>
+                  <span class="cam-model-tag">LSTM V4</span>
+                </div>
+              </div>
+            </div>
+            <div class="cam-info">
+              <div>
+                <div class="cam-info-name">Parking Lot Zone A</div>
+                <div class="cam-info-sub">CLUSTER-A · ZONE-2</div>
+              </div>
+              <span class="chip chip-green" style="font-size:9px;">Online</span>
+            </div>
+          </div>
+
+          <!-- CAM-03 -->
+          <div class="cam-card">
+            <div class="cam-feed">
+              <div class="cam-feed-overlay">
+                <div class="flex-between">
+                  <span class="cam-id-tag"><i class="bi bi-record-circle" style="color:var(--green);"></i>CAM-03</span>
+                  <div class="cam-stats">FPS: 60<br>LAT: 8ms</div>
+                </div>
+                <div class="cam-bottom">
+                  <span class="cam-location">Server Room</span>
+                  <span class="cam-model-tag">LSTM V4</span>
+                </div>
+              </div>
+            </div>
+            <div class="cam-info">
+              <div>
+                <div class="cam-info-name">Server Room 101</div>
+                <div class="cam-info-sub">CLUSTER-A · ZONE-3</div>
+              </div>
+              <span class="chip chip-green" style="font-size:9px;">Online</span>
+            </div>
+          </div>
+
+          <!-- CAM-04 INCIDENT -->
+          <div class="cam-card incident">
+            <div class="cam-feed">
+              <div class="cam-feed-overlay">
+                <div class="flex-between">
+                  <span class="cam-id-tag" style="border-color:rgba(239,68,68,0.4);"><i class="bi bi-record-circle" style="color:var(--red);"></i>CAM-04</span>
+                  <div class="cam-stats" style="color:rgba(255,150,150,0.8);">SUSPICIOUS<br>FPS: 24</div>
+                </div>
+                <div class="cam-bottom">
+                  <span class="cam-location">Loading Dock</span>
+                  <span class="cam-model-tag" style="background:var(--red);">INCIDENT</span>
+                </div>
+              </div>
+              <div class="cam-incident-bar">
+                <i class="bi bi-exclamation-triangle-fill"></i>
+                INCIDENT ESCALATED
+                <i class="bi bi-eye-fill" style="margin-left:auto;"></i>
+              </div>
+            </div>
+            <div class="cam-info">
+              <div>
+                <div class="cam-info-name">Loading Dock North</div>
+                <div class="cam-info-sub">CLUSTER-A · ZONE-4</div>
+              </div>
+              <span class="chip chip-red" style="font-size:9px;">Alert</span>
+            </div>
+          </div>
+
+          <!-- CAM-05 -->
+          <div class="cam-card">
+            <div class="cam-feed">
+              <div class="cam-feed-overlay">
+                <div class="flex-between">
+                  <span class="cam-id-tag"><i class="bi bi-record-circle" style="color:var(--green);"></i>CAM-05</span>
+                  <div class="cam-stats">FPS: 30<br>LAT: 11ms</div>
+                </div>
+                <div class="cam-bottom">
+                  <span class="cam-location">Cafeteria</span>
+                  <span class="cam-model-tag">LSTM V4</span>
+                </div>
+              </div>
+            </div>
+            <div class="cam-info">
+              <div>
+                <div class="cam-info-name">Staff Cafeteria</div>
+                <div class="cam-info-sub">CLUSTER-A · ZONE-5</div>
+              </div>
+              <span class="chip chip-green" style="font-size:9px;">Online</span>
+            </div>
+          </div>
+
+          <!-- CAM-06 -->
+          <div class="cam-card">
+            <div class="cam-feed">
+              <div class="cam-feed-overlay">
+                <div class="flex-between">
+                  <span class="cam-id-tag"><i class="bi bi-record-circle" style="color:var(--green);"></i>CAM-06</span>
+                  <div class="cam-stats">FPS: 15<br>LAT: 14ms</div>
+                </div>
+                <div class="cam-bottom">
+                  <span class="cam-location">Rear Gate</span>
+                  <span class="cam-model-tag">LSTM V4</span>
+                </div>
+              </div>
+            </div>
+            <div class="cam-info">
+              <div>
+                <div class="cam-info-name">Rear Perimeter Gate</div>
+                <div class="cam-info-sub">CLUSTER-A · ZONE-6</div>
+              </div>
+              <span class="chip chip-green" style="font-size:9px;">Online</span>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Active Incident Triage panel -->
+      <div class="incident-panel">
+        <div class="flex-between">
+          <span class="card-title"><i class="bi bi-clock-history"></i>Active Incident Triage</span>
+          <span class="chip chip-red">Critical Priority</span>
+        </div>
+
+        <div class="incident-item">
+          <div class="incident-meta"><span>14:22:05</span><span style="color:var(--text);">CAM-04</span></div>
+          <div class="incident-title">Unattended Bag</div>
+          <div class="conf-row">
+            <span class="conf-label">CONF</span>
+            <div class="conf-track"><div class="conf-fill" style="width:94%;"></div></div>
+            <span class="conf-pct">94%</span>
+            <span class="triage-link">TRIAGE →</span>
+          </div>
+        </div>
+
+        <!-- Critical Alert Popup -->
+        <div class="critical-popup" id="criticalPopup">
+          <div class="critical-popup-header">
+            <i class="bi bi-exclamation-triangle-fill"></i>
+            CRITICAL ALERT
+          </div>
+          <p>Anomaly detected on CAM-04: Multiple entities in restricted zone. Immediate response required.</p>
+          <div class="critical-popup-btns">
+            <button class="popup-btn popup-btn-ack">ACKNOWLEDGE</button>
+            <button class="popup-btn popup-btn-dism">DISMISS</button>
+          </div>
+        </div>
+
+        <div class="incident-item">
+          <div class="incident-meta"><span>14:19:45</span><span style="color:var(--text);">CAM-01</span></div>
+          <div class="incident-title">Crowd Gathering</div>
+          <div class="conf-row">
+            <span class="conf-label">CONF</span>
+            <div class="conf-track"><div class="conf-fill" style="width:92%;"></div></div>
+            <span class="conf-pct">92%</span>
+            <span class="triage-link">TRIAGE →</span>
+          </div>
+        </div>
+
+        <div class="incident-item">
+          <div class="incident-meta"><span>14:15:30</span><span style="color:var(--text);">CAM-03</span></div>
+          <div class="incident-title">Face Mask Missing</div>
+          <div class="conf-row">
+            <span class="conf-label">CONF</span>
+            <div class="conf-track"><div class="conf-fill" style="width:99%;background:var(--red);"></div></div>
+            <span class="conf-pct" style="color:var(--red);">99%</span>
+            <span class="triage-link">TRIAGE →</span>
+          </div>
+        </div>
+
+        <button class="btn btn-ghost w-full" style="justify-content:center;margin-top:auto;">View All Archived Alerts</button>
+      </div>
+    </div>
+
+    <!-- AI Pipeline + Infrastructure + Audit -->
+    <div class="grid grid-3 mb-5 fade-up fade-up-3" style="grid-template-columns: 5fr 3fr 4fr;">
+
+      <!-- AI Pipeline -->
+      <div class="pipeline">
+        <div class="pipeline-header">
+          <div class="pipeline-title"><i class="bi bi-diagram-3-fill"></i>AI Model Pipeline</div>
+          <span class="chip chip-green">Live Inference</span>
+        </div>
+        <div class="pipeline-flow">
+          <div class="pipe-step">
+            <div class="pipe-icon"><i class="bi bi-camera"></i></div>
+            <span class="pipe-label">Capture</span>
+          </div>
+          <div class="pipe-connector"></div>
+          <div class="pipe-step">
+            <div class="pipe-icon"><i class="bi bi-cpu"></i></div>
+            <span class="pipe-label">MobileNet</span>
+          </div>
+          <div class="pipe-connector"></div>
+          <div class="pipe-step">
+            <div class="pipe-icon"><i class="bi bi-graph-up"></i></div>
+            <span class="pipe-label">Feature Vec</span>
+          </div>
+          <div class="pipe-connector"></div>
+          <div class="pipe-step">
+            <div class="pipe-icon active"><i class="bi bi-lightning-charge-fill"></i></div>
+            <span class="pipe-label">LSTM</span>
+          </div>
+          <div class="pipe-connector"></div>
+          <div class="pipe-step">
+            <div class="pipe-icon"><i class="bi bi-shield-check"></i></div>
+            <span class="pipe-label">Output</span>
+          </div>
+        </div>
+        <div class="pipeline-metrics">
+          <div class="pipe-metric">
+            <div class="pipe-metric-label">Latency</div>
+            <div class="pipe-metric-val" style="color:var(--cyan);">14.2ms</div>
+          </div>
+          <div class="pipe-metric">
+            <div class="pipe-metric-label">Confidence</div>
+            <div class="pipe-metric-val" style="color:var(--green);">96.8%</div>
+          </div>
+          <div class="pipe-metric">
+            <div class="pipe-metric-label">Throughput</div>
+            <div class="pipe-metric-val" style="color:var(--blue);">312 FPS</div>
+          </div>
+          <div class="pipe-metric">
+            <div class="pipe-metric-label">Model Ver</div>
+            <div class="pipe-metric-val" style="color:var(--purple);">v2.1.4</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Infrastructure & Cost -->
+      <div class="card">
+        <div class="card-hdr">
+          <span class="card-title"><i class="bi bi-cloud-fill"></i>Infrastructure & Cost</span>
+        </div>
+        <div class="card-body">
+          <div style="text-align:center;margin-bottom:12px;">
+            <div style="font-size:36px;font-weight:700;font-family:var(--font-mono);letter-spacing:-1px;">$42</div>
+            <div class="text-xs text-muted text-mono" style="text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">Monthly Est.</div>
+            <span class="chip chip-orange">AWS FREE TIER: 75% USED</span>
+          </div>
+          <div class="flex-between mb-2" style="font-size:12px;">
+            <span class="text-sub"><i class="bi bi-hdd" style="margin-right:5px;"></i>S3 Storage</span>
+            <span style="font-family:var(--font-mono);font-weight:600;">124.8 GB</span>
+          </div>
+          <div class="prog-track mb-3"><div class="prog-fill blue" style="width:65%;"></div></div>
+          <div class="flex-between mb-2" style="font-size:12px;">
+            <span class="text-sub"><i class="bi bi-database" style="margin-right:5px;"></i>DynamoDB CU</span>
+            <span style="font-family:var(--font-mono);font-weight:600;">12k / min</span>
+          </div>
+          <div class="prog-track"><div class="prog-fill cyan" style="width:45%;"></div></div>
+        </div>
+      </div>
+
+      <!-- Security Audit Log -->
+      <div class="card">
+        <div class="card-hdr">
+          <span class="card-title"><i class="bi bi-shield-lock-fill"></i>Security Audit Log</span>
+        </div>
+        <div class="card-body" style="padding-bottom:8px;">
+          <div class="audit-row">
+            <div class="flex-between mb-1">
+              <span class="audit-who admin">Admin-01</span>
+              <span class="audit-time">14:22:10</span>
+            </div>
+            <div class="audit-action">Feed Access: CAM-04</div>
+          </div>
+          <div class="audit-row">
+            <div class="flex-between mb-1">
+              <span class="audit-who system">System</span>
+              <span class="audit-time">14:22:05</span>
+            </div>
+            <div class="audit-action">Escalation: AI-1024</div>
+          </div>
+          <div class="audit-row">
+            <div class="flex-between mb-1">
+              <span class="audit-who operator">Operator-4</span>
+              <span class="audit-time">14:15:30</span>
+            </div>
+            <div class="audit-action">Resolved: AI-1020</div>
+          </div>
+          <div class="audit-row">
+            <div class="flex-between mb-1">
+              <span class="audit-who admin">Admin-01</span>
+              <span class="audit-time">14:02:11</span>
+            </div>
+            <div class="audit-action">Login: IP 192.168.1.5</div>
+          </div>
+          <div class="flex-between" style="padding-top:10px;border-top:1px solid var(--border);font-size:11.5px;">
+            <span class="text-sub">UPTIME: 99.98%</span>
+            <i class="bi bi-box-arrow-up-right text-muted" style="cursor:pointer;"></i>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+  </main>
+
+  <!-- ══ FOOTER ════════════════════════════════════════════════ -->
+  <footer class="footer">
+    <div class="footer-left">
+      <span>© 2024 PLITHOS ENTERPRISE</span>
+      <span><span class="uptime-dot"></span>UPTIME: 99.98%</span>
+      <span>AES-256 ENCRYPTED</span>
+    </div>
+    <div class="footer-right">
+      <span id="footerClock"></span>
+      <span>V.3.0.0-STABLE</span>
+    </div>
+  </footer>
+
+</div><!-- /shell -->
+
+<script src="js/plithos.js"></script>
 </body>
 </html>

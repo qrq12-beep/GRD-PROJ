@@ -1,0 +1,92 @@
+
+============================================================
+Session started: 2026-04-18 13:13:54.189879  [mode=both  fire=ON]
+============================================================
+[ALERT] Violence  | frame   1103 | conf 0.462 | persons 2 | 13:14:33.587
+[ALERT] Violence  | frame   1110 | conf 0.595 | persons 2 | 13:14:33.832
+[ALERT] Violence  | frame   1120 | conf 0.595 | persons 2 | 13:14:34.158
+[ALERT] Violence  | frame   1130 | conf 0.543 | persons 2 | 13:14:34.491
+[ALERT] Violence  | frame   1136 | conf 0.504 | persons 3 | 13:14:34.706
+[ALERT] Violence  | frame   1143 | conf 0.421 | persons 3 | 13:14:34.968
+[ALERT] Violence  | frame   1152 | conf 0.305 | persons 3 | 13:14:35.296
+[ALERT] Violence  | frame   1159 | conf 0.471 | persons 2 | 13:14:35.529
+[ALERT] Violence  | frame   1166 | conf 0.600 | persons 4 | 13:14:35.788
+[ALERT] Violence  | frame   1168 | conf 0.714 | persons 4 | 13:14:35.958
+[ALERT] Violence  | frame   1173 | conf 0.836 | persons 6 | 13:14:36.129
+[ALERT] Violence  | frame   1183 | conf 0.993 | persons 5 | 13:14:36.359
+[ALERT] Violence  | frame   1195 | conf 0.975 | persons 5 | 13:14:36.747
+[ALERT] Violence  | frame   1208 | conf 0.966 | persons 3 | 13:14:37.188
+[ALERT] Violence  | frame   1216 | conf 0.954 | persons 3 | 13:14:37.465
+[ALERT] Violence  | frame   1218 | conf 0.952 | persons 3 | 13:14:37.619
+[ALERT] Violence  | frame   1222 | conf 0.952 | persons 3 | 13:14:37.780
+[ALERT] Violence  | frame   1228 | conf 0.965 | persons 3 | 13:14:37.930
+[ALERT] Violence  | frame   1231 | conf 0.962 | persons 3 | 13:14:38.082
+[ALERT] Violence  | frame   1233 | conf 0.958 | persons 2 | 13:14:38.233
+[ALERT] Violence  | frame   1236 | conf 0.906 | persons 2 | 13:14:38.380
+[ALERT] Violence  | frame   1241 | conf 0.887 | persons 2 | 13:14:38.528
+[ALERT] Violence  | frame   1243 | conf 0.887 | persons 2 | 13:14:38.671
+[ALERT] Violence  | frame   1247 | conf 0.860 | persons 2 | 13:14:38.828
+[ALERT] Violence  | frame   1253 | conf 0.701 | persons 2 | 13:14:38.983
+[ALERT] Violence  | frame   1257 | conf 0.601 | persons 2 | 13:14:39.128
+[ALERT] Violence  | frame   1261 | conf 0.432 | persons 4 | 13:14:39.279
+[ALERT] Violence  | frame   1280 | conf 0.799 | persons 2 | 13:14:40.148
+[ALERT] Violence  | frame   1287 | conf 0.962 | persons 2 | 13:14:40.364
+[ALERT] Violence  | frame   1296 | conf 0.934 | persons 3 | 13:14:40.530
+[ALERT] Violence  | frame   1301 | conf 0.864 | persons 3 | 13:14:40.694
+[ALERT] Violence  | frame   1305 | conf 0.796 | persons 1 | 13:14:40.832
+[ALERT] Violence  | frame   1308 | conf 0.685 | persons 2 | 13:14:40.982
+[ALERT] Violence  | frame   1316 | conf 0.646 | persons 2 | 13:14:41.121
+[ALERT] Violence  | frame   1325 | conf 0.512 | persons 3 | 13:14:41.268
+[ALERT] Violence  | frame   1334 | conf 0.457 | persons 3 | 13:14:41.570
+[ALERT] Violence  | frame   1343 | conf 0.381 | persons 4 | 13:14:41.870
+[ALERT] Violence  | frame   1350 | conf 0.330 | persons 3 | 13:14:42.108
+[ALERT] Violence  | frame   1378 | conf 0.495 | persons 2 | 13:14:43.134
+[ALERT] Violence  | frame   1379 | conf 0.573 | persons 1 | 13:14:43.283
+[ALERT] Violence  | frame   1380 | conf 0.612 | persons 1 | 13:14:43.413
+
+Session ended     : 2026-04-18 13:14:50.732034
+Mode              : both
+Frames processed  : 1578
+Violence alerts   : 41
+Fire alerts       : 0
+Smoke alerts      : 0
+Elapsed           : 56.2s
+
+============================================================
+Session started: 2026-04-18 13:31:19.122091  [mode=both  fire=ON]
+============================================================
+[ALERT] Safety    | frame    614 | missing Hardhat | persons 3 | 13:31:41.499
+[ALERT] Safety    | frame    687 | missing Hardhat | persons 2 | 13:31:43.939
+[ALERT] Safety    | frame    731 | missing Hardhat | persons 2 | 13:31:45.622
+[ALERT] Safety    | frame   1401 | missing Hardhat | persons 1 | 13:32:08.358
+
+Session ended     : 2026-04-18 13:33:16.663849
+Mode              : both
+Frames processed  : 3272
+Violence alerts   : 0
+Fire alerts       : 0
+Smoke alerts      : 0
+Elapsed           : 117.5s
+
+============================================================
+Session started: 2026-04-18 14:04:15.463031  [mode=both  fire=ON]
+============================================================
+[ALERT] Safety    | frame    981 | missing Safety Vest | persons 4 | 14:04:50.357
+[ALERT] Safety    | frame   1003 | missing Safety Vest | persons 2 | 14:04:51.134
+[ALERT] Safety    | frame   1006 | missing Safety Vest | persons 2 | 14:04:51.304
+[ALERT] Safety    | frame   1013 | missing Safety Vest | persons 2 | 14:04:51.474
+[ALERT] Safety    | frame   1017 | missing Hardhat | persons 2 | 14:04:51.632
+[ALERT] Safety    | frame   1275 | missing Safety Vest | persons 2 | 14:05:00.415
+[ALERT] Safety    | frame   1314 | missing Safety Vest | persons 1 | 14:05:01.817
+[ALERT] Safety    | frame   1569 | missing Hardhat | persons 2 | 14:05:10.468
+[ALERT] Safety    | frame   2217 | missing Hardhat | persons 1 | 14:05:33.567
+[ALERT] Safety    | frame   2220 | missing Hardhat | persons 2 | 14:05:33.733
+[ALERT] Safety    | frame   2225 | missing Hardhat | persons 1 | 14:05:33.882
+
+Session ended     : 2026-04-18 14:05:50.950974
+Mode              : both
+Frames processed  : 2641
+Violence alerts   : 0
+Fire alerts       : 0
+Smoke alerts      : 0
+Elapsed           : 95.4s
